@@ -1,1992 +1,1077 @@
-import sys
+from pathlib import Path
+
 import os
+import sys
 import mysql.connector
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QPainter, QPen, QBrush, QColor, QFont
+from PyQt6.QtGui import QPixmap, QPainter
 from PyQt6.QtWidgets import (
-    QApplication,
-    QWidget,
-    QMainWindow,
-    QLabel,
-    QPushButton,
-    QLineEdit,
-    QVBoxLayout,
-    QHBoxLayout,
-    QGridLayout,
-    QComboBox,
-    QMessageBox,
-    QFrame,
-    QStackedWidget,
-    QListWidget,
-    QListWidgetItem,
-    QDoubleSpinBox,
-    QSpinBox,
+    QApplication, QMainWindow, QWidget, QLabel, QPushButton,
+    QListWidget, QListWidgetItem, QVBoxLayout, QHBoxLayout,
+    QFrame, QMessageBox
 )
-
 
 # ============================================================
 # DATABASE CONFIGURATION
 # ============================================================
-
 DB_HOST = "127.0.0.1"
 DB_PORT = 3306
 DB_USER = "root"
-
-# ============================================================
-# CHANGE THIS TO YOUR MYSQL PASSWORD
-# ============================================================
-
-DB_PASSWORD = "InsertYourPasswordHere"
-
+DB_PASSWORD = "P14Y3R"          # <-- PUT YOUR MYSQL PASSWORD HERE
 DB_NAME = "car_customizer"
 
+# Temporary development user.
+# Your current "player" account / vehicle uses user_id = 3.
+CURRENT_USER_ID = 3
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CAR_ASSET_DIR = os.path.join(BASE_DIR, "assets", "car")
+
 
 # ============================================================
-# DATABASE CONNECTION
+# DATABASE
 # ============================================================
+class Database:
+    def __init__(self):
+        self.conn = None
+        self.connect()
 
-def get_connection():
-    try:
-        connection = mysql.connector.connect(
+    def connect(self):
+        self.conn = mysql.connector.connect(
             host=DB_HOST,
             port=DB_PORT,
             user=DB_USER,
             password=DB_PASSWORD,
-            database=DB_NAME
+            database=DB_NAME,
+            autocommit=False
         )
+        print("Connected to MySQL")
 
-        return connection
+    def cursor(self):
+        return self.conn.cursor(dictionary=True)
 
-    except mysql.connector.Error as error:
-        print("Database connection error:", error)
-        return None
+    def fetchone(self, query, params=()):
+        cur = self.cursor()
+        try:
+            cur.execute(query, params)
+            return cur.fetchone()
+        finally:
+            cur.close()
 
+    def fetchall(self, query, params=()):
+        cur = self.cursor()
+        try:
+            cur.execute(query, params)
+            return cur.fetchall()
+        finally:
+            cur.close()
 
-# ============================================================
-# DATABASE HELPER FUNCTIONS
-# ============================================================
+    def execute(self, query, params=()):
+        cur = self.cursor()
+        try:
+            cur.execute(query, params)
+            return cur.lastrowid, cur.rowcount
+        finally:
+            cur.close()
 
-def fetch_all(query, params=None):
-    connection = get_connection()
+    def commit(self):
+        self.conn.commit()
 
-    if connection is None:
-        return []
+    def rollback(self):
+        self.conn.rollback()
 
-    cursor = connection.cursor(dictionary=True)
-
-    try:
-        cursor.execute(query, params or ())
-        results = cursor.fetchall()
-        return results
-
-    except mysql.connector.Error as error:
-        print("Database error:", error)
-        return []
-
-    finally:
-        cursor.close()
-        connection.close()
-
-
-def fetch_one(query, params=None):
-    connection = get_connection()
-
-    if connection is None:
-        return None
-
-    cursor = connection.cursor(dictionary=True)
-
-    try:
-        cursor.execute(query, params or ())
-        result = cursor.fetchone()
-        return result
-
-    except mysql.connector.Error as error:
-        print("Database error:", error)
-        return None
-
-    finally:
-        cursor.close()
-        connection.close()
-
-
-def execute_query(query, params=None):
-    connection = get_connection()
-
-    if connection is None:
-        return False
-
-    cursor = connection.cursor()
-
-    try:
-        cursor.execute(query, params or ())
-        connection.commit()
-        return True
-
-    except mysql.connector.Error as error:
-        print("Database error:", error)
-        connection.rollback()
-        return False
-
-    finally:
-        cursor.close()
-        connection.close()
+    def close(self):
+        if self.conn and self.conn.is_connected():
+            self.conn.close()
 
 
 # ============================================================
-# LOGIN
+# LIVE CAR PREVIEW
 # ============================================================
+class CarPreviewWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-def login_user(username, password):
+        self.base = self.load_pixmap("base.png")
 
-    query = """
-        SELECT
-            u.user_id,
-            u.username,
-            u.money,
-            u.role_id,
-            r.role_name
-        FROM users u
-        JOIN roles r
-            ON u.role_id = r.role_id
-        WHERE u.username = %s
-        AND u.password = %s
-    """
+        # Each category is a separate transparent layer.
+        self.layers = {
+            "Paint": None,
+            "Engine": None,
+            "Wheels": None,
+            "Bumper": None,
+            "Spoiler": None,
+        }
 
-    return fetch_one(query, (username, password))
+        self.setMinimumSize(720, 400)
 
+    def load_pixmap(self, filename):
+        if not filename:
+            return None
 
-# ============================================================
-# GET USER VEHICLES
-# ============================================================
+        path = os.path.join(CAR_ASSET_DIR, filename)
 
-def get_user_vehicles(user_id):
+        if not os.path.exists(path):
+            print("Asset not found:", path)
+            return None
 
-    query = """
-        SELECT
-            v.vehicle_id,
-            v.nickname,
-            v.model_id,
-            cm.model_name,
-            cm.model_year,
-            cm.base_hp,
-            cm.base_weight,
-            cm.base_top_speed,
-            cm.base_acceleration,
-            m.manufacturer_name
-        FROM vehicles v
-        JOIN car_models cm
-            ON v.model_id = cm.model_id
-        JOIN manufacturers m
-            ON cm.manufacturer_id = m.manufacturer_id
-        WHERE v.user_id = %s
-        ORDER BY v.vehicle_id
-    """
+        pixmap = QPixmap(path)
 
-    return fetch_all(query, (user_id,))
+        if pixmap.isNull():
+            print("Could not load image:", path)
+            return None
 
+        return pixmap
 
-# ============================================================
-# GET CATEGORIES
-# ============================================================
+    def set_part(self, category_name, filename):
+        if category_name not in self.layers:
+            return
 
-def get_categories():
-
-    query = """
-        SELECT
-            category_id,
-            category_name
-        FROM categories
-        ORDER BY category_id
-    """
-
-    return fetch_all(query)
-
-
-# ============================================================
-# GET PARTS FOR CATEGORY
-# ============================================================
-
-def get_parts_by_category(category_id):
-
-    query = """
-        SELECT
-            part_id,
-            category_id,
-            part_name,
-            manufacturer,
-            price,
-            hp_bonus,
-            weight_change,
-            top_speed_bonus,
-            acceleration_bonus,
-            sprite_file,
-            layer_order
-        FROM parts
-        WHERE category_id = %s
-        ORDER BY price
-    """
-
-    return fetch_all(query, (category_id,))
-
-
-# ============================================================
-# GET INSTALLED PART
-# ============================================================
-
-def get_installed_part(vehicle_id, category_id):
-
-    query = """
-        SELECT
-            vp.part_id,
-            p.part_name,
-            p.price,
-            p.hp_bonus,
-            p.weight_change,
-            p.top_speed_bonus,
-            p.acceleration_bonus,
-            p.sprite_file,
-            p.layer_order
-        FROM vehicle_parts vp
-        JOIN parts p
-            ON vp.part_id = p.part_id
-        WHERE vp.vehicle_id = %s
-        AND vp.category_id = %s
-    """
-
-    return fetch_one(query, (vehicle_id, category_id))
-
-
-# ============================================================
-# GET ALL INSTALLED PARTS
-# ============================================================
-
-def get_installed_parts(vehicle_id):
-
-    query = """
-        SELECT
-            vp.category_id,
-            vp.part_id,
-            c.category_name,
-            p.part_name,
-            p.price,
-            p.hp_bonus,
-            p.weight_change,
-            p.top_speed_bonus,
-            p.acceleration_bonus,
-            p.sprite_file,
-            p.layer_order
-        FROM vehicle_parts vp
-        JOIN categories c
-            ON vp.category_id = c.category_id
-        JOIN parts p
-            ON vp.part_id = p.part_id
-        WHERE vp.vehicle_id = %s
-        ORDER BY p.layer_order
-    """
-
-    return fetch_all(query, (vehicle_id,))
-
-
-# ============================================================
-# INSTALL PART
-# ============================================================
-
-def install_part(vehicle_id, category_id, part_id):
-
-    connection = get_connection()
-
-    if connection is None:
-        return False, "Could not connect to database."
-
-    cursor = connection.cursor()
-
-    try:
-
-        # Check whether this part exists
-        cursor.execute(
-            """
-            SELECT part_id, part_name
-            FROM parts
-            WHERE part_id = %s
-            """,
-            (part_id,)
-        )
-
-        part = cursor.fetchone()
-
-        if part is None:
-            return False, "Part does not exist."
-
-        # Check whether the vehicle exists
-        cursor.execute(
-            """
-            SELECT vehicle_id
-            FROM vehicles
-            WHERE vehicle_id = %s
-            """,
-            (vehicle_id,)
-        )
-
-        vehicle = cursor.fetchone()
-
-        if vehicle is None:
-            return False, "Vehicle does not exist."
-
-        # vehicle_parts uses vehicle_id + category_id as primary key.
-        # Therefore one part per category can be installed.
-
-        cursor.execute(
-            """
-            SELECT part_id
-            FROM vehicle_parts
-            WHERE vehicle_id = %s
-            AND category_id = %s
-            """,
-            (vehicle_id, category_id)
-        )
-
-        existing = cursor.fetchone()
-
-        if existing:
-
-            cursor.execute(
-                """
-                UPDATE vehicle_parts
-                SET part_id = %s
-                WHERE vehicle_id = %s
-                AND category_id = %s
-                """,
-                (part_id, vehicle_id, category_id)
-            )
-
-        else:
-
-            cursor.execute(
-                """
-                INSERT INTO vehicle_parts
-                (
-                    vehicle_id,
-                    category_id,
-                    part_id
-                )
-                VALUES (%s, %s, %s)
-                """,
-                (vehicle_id, category_id, part_id)
-            )
-
-        connection.commit()
-
-        return True, "Part installed successfully."
-
-    except mysql.connector.Error as error:
-
-        connection.rollback()
-
-        return False, str(error)
-
-    finally:
-
-        cursor.close()
-        connection.close()
-
-
-# ============================================================
-# GET SHOP INVENTORY
-# ============================================================
-
-def get_shop_inventory():
-
-    query = """
-        SELECT
-            si.inventory_id,
-            si.part_id,
-            si.stock,
-            p.part_name,
-            p.manufacturer,
-            p.price,
-            c.category_name
-        FROM shop_inventory si
-        JOIN parts p
-            ON si.part_id = p.part_id
-        JOIN categories c
-            ON p.category_id = c.category_id
-        ORDER BY c.category_name, p.price
-    """
-
-    return fetch_all(query)
-
-
-# ============================================================
-# BUY PART
-# ============================================================
-
-def buy_part(user_id, part_id, quantity):
-
-    connection = get_connection()
-
-    if connection is None:
-        return False, "Database connection failed."
-
-    cursor = connection.cursor(dictionary=True)
-
-    try:
-
-        # Get user money
-        cursor.execute(
-            """
-            SELECT money
-            FROM users
-            WHERE user_id = %s
-            FOR UPDATE
-            """,
-            (user_id,)
-        )
-
-        user = cursor.fetchone()
-
-        if user is None:
-            return False, "User not found."
-
-        # Get shop stock and price
-        cursor.execute(
-            """
-            SELECT
-                si.stock,
-                p.price,
-                p.part_name
-            FROM shop_inventory si
-            JOIN parts p
-                ON si.part_id = p.part_id
-            WHERE si.part_id = %s
-            FOR UPDATE
-            """,
-            (part_id,)
-        )
-
-        item = cursor.fetchone()
-
-        if item is None:
-            return False, "Part is not available in the shop."
-
-        if item["stock"] < quantity:
-            return False, "Not enough stock."
-
-        total_price = float(item["price"]) * quantity
-
-        if float(user["money"]) < total_price:
-            return False, "You do not have enough money."
-
-        # Deduct money
-        cursor.execute(
-            """
-            UPDATE users
-            SET money = money - %s
-            WHERE user_id = %s
-            """,
-            (total_price, user_id)
-        )
-
-        # Reduce stock
-        cursor.execute(
-            """
-            UPDATE shop_inventory
-            SET stock = stock - %s
-            WHERE part_id = %s
-            """,
-            (quantity, part_id)
-        )
-
-        # Check player inventory
-        cursor.execute(
-            """
-            SELECT inventory_id
-            FROM player_inventory
-            WHERE user_id = %s
-            AND part_id = %s
-            """,
-            (user_id, part_id)
-        )
-
-        inventory = cursor.fetchone()
-
-        if inventory:
-
-            cursor.execute(
-                """
-                UPDATE player_inventory
-                SET quantity = quantity + %s
-                WHERE user_id = %s
-                AND part_id = %s
-                """,
-                (quantity, user_id, part_id)
-            )
-
-        else:
-
-            cursor.execute(
-                """
-                INSERT INTO player_inventory
-                (
-                    user_id,
-                    part_id,
-                    quantity
-                )
-                VALUES (%s, %s, %s)
-                """,
-                (user_id, part_id, quantity)
-            )
-
-        # Add purchase record
-        cursor.execute(
-            """
-            INSERT INTO purchases
-            (
-                user_id,
-                part_id,
-                quantity,
-                total_price
-            )
-            VALUES (%s, %s, %s, %s)
-            """,
-            (
-                user_id,
-                part_id,
-                quantity,
-                total_price
-            )
-        )
-
-        connection.commit()
-
-        return True, f"Purchased {quantity} x {item['part_name']}."
-
-    except mysql.connector.Error as error:
-
-        connection.rollback()
-
-        return False, str(error)
-
-    finally:
-
-        cursor.close()
-        connection.close()
-
-
-# ============================================================
-# CAR PREVIEW
-# ============================================================
-
-class CarPreview(QFrame):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.setMinimumSize(600, 330)
-
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-
-        self.setStyleSheet(
-            """
-            QFrame {
-                background-color: #20242b;
-                border: 1px solid #444;
-                border-radius: 10px;
-            }
-            """
-        )
-
-        self.vehicle_id = None
-
-        self.installed_parts = []
-
-    def set_vehicle(self, vehicle_id):
-
-        self.vehicle_id = vehicle_id
-
-        self.installed_parts = get_installed_parts(vehicle_id)
-
+        self.layers[category_name] = self.load_pixmap(filename)
         self.update()
 
+    def clear_part(self, category_name):
+        if category_name in self.layers:
+            self.layers[category_name] = None
+            self.update()
+
     def paintEvent(self, event):
-
         painter = QPainter(self)
-
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        width = self.width()
-        height = self.height()
-
-        # Background
-        painter.fillRect(
-            0,
-            0,
-            width,
-            height,
-            QColor("#20242b")
+        painter.setRenderHint(
+            QPainter.RenderHint.SmoothPixmapTransform
         )
 
-        # Ground
-        ground_y = int(height * 0.72)
+        if self.base is None:
+            painter.end()
+            return
 
-        painter.setPen(
-            QPen(QColor("#555"), 2)
+        base_size = self.base.size()
+
+        scale = min(
+            self.width() / base_size.width(),
+            self.height() / base_size.height()
         )
 
-        painter.drawLine(
-            40,
-            ground_y,
-            width - 40,
-            ground_y
-        )
+        draw_w = int(base_size.width() * scale)
+        draw_h = int(base_size.height() * scale)
 
-        # ----------------------------------------------------
-        # SIMPLE PLACEHOLDER CAR
-        #
-        # This gives us a working preview before we add
-        # the actual PNG sprites.
-        # ----------------------------------------------------
+        x = (self.width() - draw_w) // 2
+        y = (self.height() - draw_h) // 2
 
-        car_x = int(width * 0.18)
-        car_y = int(height * 0.42)
+        def draw_layer(image):
+            if image is None:
+                return
 
-        car_width = int(width * 0.64)
-        car_height = int(height * 0.25)
-
-        body_color = QColor("#bfc5cc")
-
-        # Body
-        painter.setBrush(
-            QBrush(body_color)
-        )
-
-        painter.setPen(
-            QPen(QColor("#111"), 3)
-        )
-
-        painter.drawRoundedRect(
-            car_x,
-            car_y,
-            car_width,
-            car_height,
-            20,
-            20
-        )
-
-        # Roof
-        roof_points = [
-            (car_x + 100, car_y),
-            (car_x + 170, car_y - 65),
-            (car_x + 370, car_y - 65),
-            (car_x + 450, car_y)
-        ]
-
-        from PyQt6.QtGui import QPolygon
-
-        polygon = QPolygon()
-
-        for x, y in roof_points:
-            polygon.append(
-                __import__("PyQt6.QtCore", fromlist=["QPoint"]).QPoint(
-                    x,
-                    y
-                )
+            scaled = image.scaled(
+                draw_w,
+                draw_h,
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
             )
 
-        painter.setBrush(
-            QBrush(QColor("#858b93"))
-        )
+            painter.drawPixmap(x, y, scaled)
 
-        painter.drawPolygon(polygon)
-
-        # Windows
-        painter.setBrush(
-            QBrush(QColor("#242b34"))
-        )
-
-        painter.drawPolygon(
-            QPolygon(
-                [
-                    __import__("PyQt6.QtCore", fromlist=["QPoint"]).QPoint(
-                        car_x + 175,
-                        car_y - 55
-                    ),
-                    __import__("PyQt6.QtCore", fromlist=["QPoint"]).QPoint(
-                        car_x + 265,
-                        car_y - 55
-                    ),
-                    __import__("PyQt6.QtCore", fromlist=["QPoint"]).QPoint(
-                        car_x + 265,
-                        car_y - 5
-                    ),
-                    __import__("PyQt6.QtCore", fromlist=["QPoint"]).QPoint(
-                        car_x + 165,
-                        car_y - 5
-                    )
-                ]
-            )
-        )
-
-        painter.drawPolygon(
-            QPolygon(
-                [
-                    __import__("PyQt6.QtCore", fromlist=["QPoint"]).QPoint(
-                        car_x + 275,
-                        car_y - 55
-                    ),
-                    __import__("PyQt6.QtCore", fromlist=["QPoint"]).QPoint(
-                        car_x + 365,
-                        car_y - 55
-                    ),
-                    __import__("PyQt6.QtCore", fromlist=["QPoint"]).QPoint(
-                        car_x + 430,
-                        car_y - 5
-                    ),
-                    __import__("PyQt6.QtCore", fromlist=["QPoint"]).QPoint(
-                        car_x + 275,
-                        car_y - 5
-                    )
-                ]
-            )
-        )
-
-        # Wheels
-        wheel_radius = 38
-
-        wheel_centers = [
-            (
-                car_x + 110,
-                car_y + car_height
-            ),
-            (
-                car_x + car_width - 110,
-                car_y + car_height
-            )
-        ]
-
-        for center_x, center_y in wheel_centers:
-
-            painter.setBrush(
-                QBrush(QColor("#101010"))
-            )
-
-            painter.drawEllipse(
-                center_x - wheel_radius,
-                center_y - wheel_radius,
-                wheel_radius * 2,
-                wheel_radius * 2
-            )
-
-            painter.setBrush(
-                QBrush(QColor("#777"))
-            )
-
-            painter.drawEllipse(
-                center_x - 18,
-                center_y - 18,
-                36,
-                36
-            )
-
-        # ----------------------------------------------------
-        # INSTALLED PART LABELS
-        # ----------------------------------------------------
-
-        if self.installed_parts:
-
-            y = 25
-
-            painter.setFont(
-                QFont("Arial", 9)
-            )
-
-            painter.setPen(
-                QPen(QColor("#dddddd"))
-            )
-
-            for part in self.installed_parts:
-
-                text = (
-                    f"{part['category_name']}: "
-                    f"{part['part_name']}"
-                )
-
-                painter.drawText(
-                    15,
-                    y,
-                    text
-                )
-
-                y += 18
-
-        else:
-
-            painter.setPen(
-                QPen(QColor("#aaaaaa"))
-            )
-
-            painter.drawText(
-                20,
-                30,
-                "No modifications installed"
-            )
+        # Layer order is important.
+        draw_layer(self.base)
+        draw_layer(self.layers["Paint"])
+        draw_layer(self.layers["Engine"])
+        draw_layer(self.layers["Wheels"])
+        draw_layer(self.layers["Bumper"])
+        draw_layer(self.layers["Spoiler"])
 
         painter.end()
 
 
 # ============================================================
-# LOGIN WINDOW
+# MAIN GARAGE WINDOW
 # ============================================================
-
-class LoginWindow(QWidget):
-
-    def __init__(self):
-
+class GarageWindow(QMainWindow):
+    def __init__(self, db):
         super().__init__()
 
-        self.dashboard = None
+        self.db = db
 
-        self.setWindowTitle(
-            "Car Customizer - Login"
-        )
+        self.current_vehicle = None
+        self.parts = []
+        self.categories = []
+        self.selected_part = None
 
-        self.setFixedSize(
-            450,
-            350
-        )
+        # category_id -> currently installed part
+        self.installed_parts = {}
 
-        self.setStyleSheet(
+        self.setWindowTitle("Car Customizer - Garage")
+        self.resize(1400, 850)
+
+        self.load_vehicle()
+        self.load_categories()
+        self.load_parts()
+
+        self.build_ui()
+
+        self.load_installed_parts()
+        self.update_money()
+        self.refresh_stats()
+
+    # --------------------------------------------------------
+    # DATABASE DATA
+    # --------------------------------------------------------
+    def load_vehicle(self):
+        self.current_vehicle = self.db.fetchone(
             """
-            QWidget {
-                background-color: #17191d;
-                color: #eeeeee;
-                font-family: Arial;
-            }
-
-            QLineEdit {
-                background-color: #252930;
-                border: 1px solid #444;
-                border-radius: 6px;
-                padding: 10px;
-                color: white;
-            }
-
-            QPushButton {
-                background-color: #3d6df2;
-                border: none;
-                border-radius: 6px;
-                padding: 10px;
-                color: white;
-                font-weight: bold;
-            }
-
-            QPushButton:hover {
-                background-color: #527ef5;
-            }
-            """
+            SELECT
+                v.vehicle_id,
+                v.user_id,
+                v.model_id,
+                v.nickname,
+                cm.model_name,
+                cm.model_year,
+                cm.base_hp,
+                cm.base_weight,
+                cm.base_top_speed,
+                cm.base_acceleration,
+                m.manufacturer_name
+            FROM vehicles v
+            JOIN car_models cm
+                ON v.model_id = cm.model_id
+            JOIN manufacturers m
+                ON cm.manufacturer_id = m.manufacturer_id
+            WHERE v.user_id = %s
+            ORDER BY v.vehicle_id
+            LIMIT 1
+            """,
+            (CURRENT_USER_ID,)
         )
 
-        layout = QVBoxLayout()
-
-        title = QLabel(
-            "CAR CUSTOMIZER"
-        )
-
-        title.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
-
-        title.setFont(
-            QFont("Arial", 24, QFont.Weight.Bold)
-        )
-
-        layout.addWidget(title)
-
-        subtitle = QLabel(
-            "2D Vehicle Upgrade Garage"
-        )
-
-        subtitle.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
-
-        layout.addWidget(subtitle)
-
-        layout.addSpacing(25)
-
-        self.username = QLineEdit()
-
-        self.username.setPlaceholderText(
-            "Username"
-        )
-
-        layout.addWidget(
-            self.username
-        )
-
-        self.password = QLineEdit()
-
-        self.password.setPlaceholderText(
-            "Password"
-        )
-
-        self.password.setEchoMode(
-            QLineEdit.EchoMode.Password
-        )
-
-        layout.addWidget(
-            self.password
-        )
-
-        layout.addSpacing(10)
-
-        login_button = QPushButton(
-            "LOGIN"
-        )
-
-        login_button.clicked.connect(
-            self.login
-        )
-
-        layout.addWidget(
-            login_button
-        )
-
-        guest_button = QPushButton(
-            "CONTINUE AS GUEST"
-        )
-
-        guest_button.clicked.connect(
-            self.guest_login
-        )
-
-        layout.addWidget(
-            guest_button
-        )
-
-        self.status = QLabel()
-
-        self.status.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
-
-        layout.addWidget(
-            self.status
-        )
-
-        self.setLayout(layout)
-
-    def login(self):
-
-        username = self.username.text().strip()
-
-        password = self.password.text()
-
-        if not username or not password:
-
-            self.status.setText(
-                "Enter username and password."
+        if not self.current_vehicle:
+            raise RuntimeError(
+                f"No vehicle found for user_id={CURRENT_USER_ID}."
             )
 
-            return
-
-        user = login_user(
-            username,
-            password
+    def load_categories(self):
+        self.categories = self.db.fetchall(
+            """
+            SELECT category_id, category_name
+            FROM categories
+            ORDER BY category_id
+            """
         )
 
-        if user is None:
+    def load_parts(self):
+        self.parts = self.db.fetchall(
+            """
+            SELECT
+                p.part_id,
+                p.category_id,
+                c.category_name,
+                p.part_name,
+                p.manufacturer,
+                p.price,
+                p.hp_bonus,
+                p.weight_change,
+                p.top_speed_bonus,
+                p.acceleration_bonus,
+                p.sprite_file,
+                p.layer_order
+            FROM parts p
+            JOIN categories c
+                ON p.category_id = c.category_id
+            ORDER BY p.layer_order, c.category_name, p.part_id
+            """
+        )
 
-            self.status.setText(
-                "Invalid username or password."
+    def load_installed_parts(self):
+        vehicle_id = self.current_vehicle["vehicle_id"]
+
+        rows = self.db.fetchall(
+            """
+            SELECT
+                vp.category_id,
+                vp.part_id,
+                p.part_name,
+                p.sprite_file,
+                p.layer_order,
+                p.hp_bonus,
+                p.weight_change,
+                p.top_speed_bonus,
+                p.acceleration_bonus,
+                c.category_name
+            FROM vehicle_parts vp
+            JOIN parts p
+                ON vp.part_id = p.part_id
+            JOIN categories c
+                ON vp.category_id = c.category_id
+            WHERE vp.vehicle_id = %s
+            ORDER BY p.layer_order
+            """,
+            (vehicle_id,)
+        )
+
+        self.installed_parts.clear()
+
+        for row in rows:
+            self.installed_parts[row["category_id"]] = row
+
+            self.preview.set_part(
+                row["category_name"],
+                row["sprite_file"]
             )
 
-            return
-
-        self.open_dashboard(user)
-
-    def guest_login(self):
-
-        guest_user = {
-            "user_id": None,
-            "username": "Guest",
-            "money": 0,
-            "role_id": None,
-            "role_name": "Guest"
-        }
-
-        self.open_dashboard(
-            guest_user
-        )
-
-    def open_dashboard(self, user):
-
-        self.dashboard = MainWindow(
-            user
-        )
-
-        self.dashboard.show()
-
-        self.close()
-
-
-# ============================================================
-# MAIN WINDOW
-# ============================================================
-
-class MainWindow(QMainWindow):
-
-    def __init__(self, user):
-
-        super().__init__()
-
-        self.user = user
-
-        self.selected_vehicle = None
-
-        self.setWindowTitle(
-            "Car Customizer"
-        )
-
-        self.resize(
-            1200,
-            750
-        )
-
-        self.setStyleSheet(
+    def get_inventory_quantity(self, part_id):
+        row = self.db.fetchone(
             """
-            QMainWindow {
-                background-color: #17191d;
-            }
+            SELECT quantity
+            FROM player_inventory
+            WHERE user_id = %s
+              AND part_id = %s
+            """,
+            (CURRENT_USER_ID, part_id)
+        )
 
+        return int(row["quantity"]) if row else 0
+
+    def update_money(self):
+        row = self.db.fetchone(
+            """
+            SELECT money
+            FROM users
+            WHERE user_id = %s
+            """,
+            (CURRENT_USER_ID,)
+        )
+
+        if row:
+            self.money_label.setText(
+                f"Money: ₹{float(row['money']):,.2f}"
+            )
+
+    # --------------------------------------------------------
+    # USER INTERFACE
+    # --------------------------------------------------------
+    def build_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+
+        # Garage-style UI. We can replace this with a proper
+        # garage background image later.
+        central.setStyleSheet("""
             QWidget {
+                background: #20242a;
                 color: #eeeeee;
-                font-family: Arial;
             }
 
-            QPushButton {
-                background-color: #303640;
-                border: 1px solid #4a505a;
-                border-radius: 6px;
-                padding: 9px;
+            QFrame#topbar {
+                background: #111418;
+                border-bottom: 2px solid #3b414a;
             }
 
-            QPushButton:hover {
-                background-color: #414954;
-            }
-
-            QComboBox {
-                background-color: #252930;
-                border: 1px solid #444;
-                border-radius: 6px;
-                padding: 8px;
+            QFrame#panel {
+                background: #171a1f;
+                border: 1px solid #3b414a;
+                border-radius: 10px;
             }
 
             QListWidget {
-                background-color: #20242b;
-                border: 1px solid #444;
+                background: #101216;
+                border: 1px solid #3b414a;
+                border-radius: 8px;
+                padding: 4px;
+            }
+
+            QListWidget::item {
+                padding: 12px 8px;
                 border-radius: 6px;
             }
 
-            QLabel {
-                color: #eeeeee;
+            QListWidget::item:selected {
+                background: #3b4654;
             }
-            """
+
+            QPushButton {
+                background: #343c47;
+                border: 1px solid #596574;
+                border-radius: 7px;
+                padding: 9px 12px;
+            }
+
+            QPushButton:hover {
+                background: #46515f;
+            }
+
+            QPushButton#buyButton {
+                background: #2f6f4e;
+                font-weight: bold;
+            }
+
+            QPushButton#buyButton:hover {
+                background: #3b875f;
+            }
+
+            QLabel#title {
+                font-size: 22px;
+                font-weight: bold;
+            }
+
+            QLabel#money {
+                font-size: 18px;
+                font-weight: bold;
+            }
+
+            QLabel#section {
+                font-size: 15px;
+                font-weight: bold;
+            }
+
+            QLabel#stat {
+                font-size: 14px;
+            }
+        """)
+
+        root = QVBoxLayout(central)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(10)
+
+        # ==========================
+        # TOP BAR
+        # ==========================
+        topbar = QFrame()
+        topbar.setObjectName("topbar")
+
+        top_layout = QHBoxLayout(topbar)
+        top_layout.setContentsMargins(15, 10, 15, 10)
+
+        title = QLabel("🔧 CAR CUSTOMIZER GARAGE")
+        title.setObjectName("title")
+
+        vehicle_name = QLabel(
+            f"{self.current_vehicle['nickname']}  •  "
+            f"{self.current_vehicle['manufacturer_name']} "
+            f"{self.current_vehicle['model_name']}"
         )
 
-        self.create_ui()
+        self.money_label = QLabel("Money: ₹0.00")
+        self.money_label.setObjectName("money")
 
-        self.load_vehicles()
+        top_layout.addWidget(title)
+        top_layout.addStretch()
+        top_layout.addWidget(vehicle_name)
+        top_layout.addSpacing(30)
+        top_layout.addWidget(self.money_label)
 
-    # --------------------------------------------------------
-    # UI
-    # --------------------------------------------------------
+        root.addWidget(topbar)
 
-    def create_ui(self):
+        # ==========================
+        # THREE MAIN COLUMNS
+        # ==========================
+        main = QHBoxLayout()
+        main.setSpacing(10)
 
-        central = QWidget()
+        # LEFT: CATEGORIES
+        left_panel = QFrame()
+        left_panel.setObjectName("panel")
 
-        self.setCentralWidget(
-            central
-        )
+        left_layout = QVBoxLayout(left_panel)
 
-        main_layout = QVBoxLayout()
+        category_title = QLabel("CATEGORIES")
+        category_title.setObjectName("section")
 
-        # Header
-        header = QHBoxLayout()
+        left_layout.addWidget(category_title)
 
-        title = QLabel(
-            "CAR CUSTOMIZER"
-        )
+        self.category_list = QListWidget()
 
-        title.setFont(
-            QFont(
-                "Arial",
-                22,
-                QFont.Weight.Bold
-            )
-        )
-
-        header.addWidget(
-            title
-        )
-
-        header.addStretch()
-
-        self.user_label = QLabel()
-
-        self.update_user_label()
-
-        header.addWidget(
-            self.user_label
-        )
-
-        logout_button = QPushButton(
-            "Logout"
-        )
-
-        logout_button.clicked.connect(
-            self.logout
-        )
-
-        header.addWidget(
-            logout_button
-        )
-
-        main_layout.addLayout(
-            header
-        )
-
-        # Main stack
-        self.stack = QStackedWidget()
-
-        self.garage_page = self.create_garage_page()
-
-        self.shop_page = self.create_shop_page()
-
-        self.stack.addWidget(
-            self.garage_page
-        )
-
-        self.stack.addWidget(
-            self.shop_page
-        )
-
-        main_layout.addWidget(
-            self.stack
-        )
-
-        # Navigation
-        navigation = QHBoxLayout()
-
-        garage_button = QPushButton(
-            "GARAGE"
-        )
-
-        garage_button.clicked.connect(
-            lambda: self.stack.setCurrentWidget(
-                self.garage_page
-            )
-        )
-
-        navigation.addWidget(
-            garage_button
-        )
-
-        shop_button = QPushButton(
-            "SHOP"
-        )
-
-        shop_button.clicked.connect(
-            lambda: self.stack.setCurrentWidget(
-                self.shop_page
-            )
-        )
-
-        navigation.addWidget(
-            shop_button
-        )
-
-        # Admin / manager buttons
-        role = self.user.get(
-            "role_name",
-            "Guest"
-        )
-
-        if role in (
-            "Administrator",
-            "Shop Manager"
-        ):
-
-            manager_button = QPushButton(
-                "MANAGEMENT"
-            )
-
-            manager_button.clicked.connect(
-                self.open_management
-            )
-
-            navigation.addWidget(
-                manager_button
-            )
-
-        main_layout.addLayout(
-            navigation
-        )
-
-        central.setLayout(
-            main_layout
-        )
-
-    # --------------------------------------------------------
-    # Garage Page
-    # --------------------------------------------------------
-
-    def create_garage_page(self):
-
-        page = QWidget()
-
-        layout = QHBoxLayout()
-
-        # Left side
-        left = QVBoxLayout()
-
-        garage_title = QLabel(
-            "MY GARAGE"
-        )
-
-        garage_title.setFont(
-            QFont(
-                "Arial",
-                18,
-                QFont.Weight.Bold
-            )
-        )
-
-        left.addWidget(
-            garage_title
-        )
-
-        self.vehicle_list = QListWidget()
-
-        self.vehicle_list.itemClicked.connect(
-            self.vehicle_selected
-        )
-
-        left.addWidget(
-            self.vehicle_list
-        )
-
-        # Right side
-        right = QVBoxLayout()
-
-        preview_title = QLabel(
-            "LIVE 2D PREVIEW"
-        )
-
-        preview_title.setFont(
-            QFont(
-                "Arial",
-                18,
-                QFont.Weight.Bold
-            )
-        )
-
-        right.addWidget(
-            preview_title
-        )
-
-        self.preview = CarPreview()
-
-        right.addWidget(
-            self.preview
-        )
-
-        # Stats
-        self.stats_label = QLabel(
-            "Select a vehicle."
-        )
-
-        self.stats_label.setFont(
-            QFont(
-                "Arial",
-                12
-            )
-        )
-
-        right.addWidget(
-            self.stats_label
-        )
-
-        # Categories
-        customization_title = QLabel(
-            "CUSTOMIZATION"
-        )
-
-        customization_title.setFont(
-            QFont(
-                "Arial",
-                16,
-                QFont.Weight.Bold
-            )
-        )
-
-        right.addWidget(
-            customization_title
-        )
-
-        self.customization_layout = QGridLayout()
-
-        right.addLayout(
-            self.customization_layout
-        )
-
-        layout.addLayout(
-            left,
-            1
-        )
-
-        layout.addLayout(
-            right,
-            3
-        )
-
-        page.setLayout(
-            layout
-        )
-
-        return page
-
-    # --------------------------------------------------------
-    # Load Vehicles
-    # --------------------------------------------------------
-
-    def load_vehicles(self):
-
-        self.vehicle_list.clear()
-
-        if self.user["user_id"] is None:
-
+        for category in self.categories:
             item = QListWidgetItem(
-                "Guest Mode - Login to access your garage"
-            )
-
-            self.vehicle_list.addItem(
-                item
-            )
-
-            return
-
-        vehicles = get_user_vehicles(
-            self.user["user_id"]
-        )
-
-        for vehicle in vehicles:
-
-            manufacturer = vehicle[
-                "manufacturer_name"
-            ]
-
-            model = vehicle[
-                "model_name"
-            ]
-
-            nickname = vehicle[
-                "nickname"
-            ]
-
-            text = (
-                f"{nickname or 'Unnamed Car'}\n"
-                f"{manufacturer} {model}"
-            )
-
-            item = QListWidgetItem(
-                text
+                category["category_name"]
             )
 
             item.setData(
                 Qt.ItemDataRole.UserRole,
-                vehicle
+                category["category_id"]
             )
 
-            self.vehicle_list.addItem(
-                item
-            )
+            self.category_list.addItem(item)
 
-        if vehicles:
+        self.category_list.currentItemChanged.connect(
+            self.category_changed
+        )
 
-            self.vehicle_list.setCurrentRow(
-                0
-            )
+        left_layout.addWidget(self.category_list)
 
-            self.vehicle_selected(
-                self.vehicle_list.item(0)
-            )
+        main.addWidget(left_panel, 1)
 
-        else:
+        # CENTER: CAR PREVIEW
+        center_panel = QFrame()
+        center_panel.setObjectName("panel")
 
-            self.stats_label.setText(
-                "You do not own any vehicles."
-            )
+        center_layout = QVBoxLayout(center_panel)
+
+        preview_title = QLabel("LIVE PREVIEW")
+        preview_title.setObjectName("section")
+        preview_title.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        center_layout.addWidget(preview_title)
+
+        self.preview = CarPreviewWidget()
+        center_layout.addWidget(self.preview, 1)
+
+        self.preview_info = QLabel(
+            "Select a part to preview it on the car."
+        )
+        self.preview_info.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        center_layout.addWidget(self.preview_info)
+
+        main.addWidget(center_panel, 4)
+
+        # RIGHT: PARTS
+        right_panel = QFrame()
+        right_panel.setObjectName("panel")
+
+        right_layout = QVBoxLayout(right_panel)
+
+        parts_title = QLabel("PARTS SHOP")
+        parts_title.setObjectName("section")
+
+        right_layout.addWidget(parts_title)
+
+        self.part_list = QListWidget()
+
+        self.part_list.currentItemChanged.connect(
+            self.part_selected
+        )
+
+        right_layout.addWidget(
+            self.part_list,
+            1
+        )
+
+        self.part_details = QLabel(
+            "Select a part."
+        )
+
+        self.part_details.setWordWrap(True)
+
+        right_layout.addWidget(
+            self.part_details
+        )
+
+        self.buy_button = QPushButton(
+            "BUY / INSTALL"
+        )
+
+        self.buy_button.setObjectName(
+            "buyButton"
+        )
+
+        self.buy_button.clicked.connect(
+            self.install_selected_part
+        )
+
+        right_layout.addWidget(
+            self.buy_button
+        )
+
+        main.addWidget(
+            right_panel,
+            2
+        )
+
+        root.addLayout(main, 1)
+
+        # ==========================
+        # STATS BAR
+        # ==========================
+        stats_panel = QFrame()
+        stats_panel.setObjectName("panel")
+
+        stats_layout = QHBoxLayout(stats_panel)
+
+        self.hp_label = QLabel()
+        self.weight_label = QLabel()
+        self.speed_label = QLabel()
+        self.accel_label = QLabel()
+
+        for label in [
+            self.hp_label,
+            self.weight_label,
+            self.speed_label,
+            self.accel_label
+        ]:
+            label.setObjectName("stat")
+            stats_layout.addWidget(label)
+
+        root.addWidget(stats_panel)
+
+        # Start with first category.
+        if self.category_list.count() > 0:
+            self.category_list.setCurrentRow(0)
 
     # --------------------------------------------------------
-    # Vehicle Selected
+    # CATEGORY SELECTION
     # --------------------------------------------------------
+    def category_changed(self, current, previous):
+        if not current:
+            return
 
-    def vehicle_selected(self, item):
-
-        vehicle = item.data(
+        category_id = current.data(
             Qt.ItemDataRole.UserRole
         )
 
-        if vehicle is None:
+        self.part_list.clear()
+        self.selected_part = None
+        self.part_details.setText(
+            "Select a part."
+        )
+
+        for part in self.parts:
+            if part["category_id"] == category_id:
+                item = QListWidgetItem(
+                    f"{part['part_name']}  —  "
+                    f"₹{float(part['price']):,.2f}"
+                )
+
+                item.setData(
+                    Qt.ItemDataRole.UserRole,
+                    part["part_id"]
+                )
+
+                self.part_list.addItem(item)
+
+    # --------------------------------------------------------
+    # PART SELECTION
+    # --------------------------------------------------------
+    def find_part(self, part_id):
+        for part in self.parts:
+            if part["part_id"] == part_id:
+                return part
+
+        return None
+
+    def part_selected(self, current, previous):
+        if not current:
+            self.selected_part = None
             return
 
-        self.selected_vehicle = vehicle
+        part_id = current.data(
+            Qt.ItemDataRole.UserRole
+        )
 
-        vehicle_id = vehicle[
+        part = self.find_part(part_id)
+
+        if not part:
+            return
+
+        self.selected_part = part
+
+        quantity = self.get_inventory_quantity(
+            part_id
+        )
+
+        self.part_details.setText(
+            f"<b>{part['part_name']}</b><br>"
+            f"Category: {part['category_name']}<br>"
+            f"Price: ₹{float(part['price']):,.2f}<br>"
+            f"HP bonus: {int(part['hp_bonus'] or 0):+d}<br>"
+            f"Weight change: {int(part['weight_change'] or 0):+d}<br>"
+            f"Top speed: {int(part['top_speed_bonus'] or 0):+d}<br>"
+            f"Acceleration: "
+            f"{float(part['acceleration_bonus'] or 0):+.2f}<br>"
+            f"Owned: {quantity}"
+        )
+
+        # ====================================================
+        # THIS IS THE LIVE PREVIEW
+        # It does NOT change MySQL.
+        # ====================================================
+        self.preview.set_part(
+            part["category_name"],
+            part["sprite_file"]
+        )
+
+        self.preview_info.setText(
+            f"Previewing: {part['part_name']} "
+            f"(not installed yet)"
+        )
+
+    # --------------------------------------------------------
+    # STATS
+    # --------------------------------------------------------
+    def refresh_stats(self):
+        hp = int(
+            self.current_vehicle["base_hp"] or 0
+        )
+
+        weight = int(
+            self.current_vehicle["base_weight"] or 0
+        )
+
+        speed = int(
+            self.current_vehicle["base_top_speed"] or 0
+        )
+
+        accel = float(
+            self.current_vehicle["base_acceleration"] or 0
+        )
+
+        for part in self.installed_parts.values():
+            hp += int(
+                part.get("hp_bonus", 0) or 0
+            )
+
+            weight += int(
+                part.get("weight_change", 0) or 0
+            )
+
+            speed += int(
+                part.get("top_speed_bonus", 0) or 0
+            )
+
+            accel += float(
+                part.get("acceleration_bonus", 0) or 0
+            )
+
+        self.hp_label.setText(
+            f"HP: {hp}"
+        )
+
+        self.weight_label.setText(
+            f"Weight: {weight} kg"
+        )
+
+        self.speed_label.setText(
+            f"Top Speed: {speed} km/h"
+        )
+
+        self.accel_label.setText(
+            f"Acceleration: {accel:.2f} s"
+        )
+
+    # --------------------------------------------------------
+    # BUY / INSTALL
+    # --------------------------------------------------------
+    def install_selected_part(self):
+        if not self.selected_part:
+            QMessageBox.warning(
+                self,
+                "No Part Selected",
+                "Select a part first."
+            )
+            return
+
+        self.install_part(
+            self.selected_part
+        )
+
+    def install_part(self, part):
+        vehicle_id = self.current_vehicle[
             "vehicle_id"
         ]
 
-        self.preview.set_vehicle(
-            vehicle_id
-        )
+        part_id = part["part_id"]
+        category_id = part["category_id"]
+        category_name = part["category_name"]
+        price = float(part["price"])
 
-        self.update_stats()
+        try:
+            self.db.conn.start_transaction()
 
-        self.create_customization_controls()
-
-    # --------------------------------------------------------
-    # Stats
-    # --------------------------------------------------------
-
-    def update_stats(self):
-
-        if self.selected_vehicle is None:
-            return
-
-        vehicle = self.selected_vehicle
-
-        hp = vehicle["base_hp"] or 0
-
-        weight = vehicle["base_weight"] or 0
-
-        top_speed = (
-            vehicle["base_top_speed"]
-            or 0
-        )
-
-        acceleration = (
-            float(
-                vehicle["base_acceleration"]
-                or 0
-            )
-        )
-
-        parts = get_installed_parts(
-            vehicle["vehicle_id"]
-        )
-
-        for part in parts:
-
-            hp += (
-                part["hp_bonus"]
-                or 0
+            # Check whether player already owns it.
+            inventory = self.db.fetchone(
+                """
+                SELECT inventory_id, quantity
+                FROM player_inventory
+                WHERE user_id = %s
+                  AND part_id = %s
+                FOR UPDATE
+                """,
+                (
+                    CURRENT_USER_ID,
+                    part_id
+                )
             )
 
-            weight += (
-                part["weight_change"]
-                or 0
-            )
-
-            top_speed += (
-                part["top_speed_bonus"]
-                or 0
-            )
-
-            acceleration += float(
-                part["acceleration_bonus"]
-                or 0
-            )
-
-        self.stats_label.setText(
-            f"""
-            <b>{vehicle['manufacturer_name']} {vehicle['model_name']}</b>
-            &nbsp;&nbsp;|&nbsp;&nbsp;
-            HP: <b>{hp}</b>
-            &nbsp;&nbsp;|&nbsp;&nbsp;
-            Weight: <b>{weight} kg</b>
-            &nbsp;&nbsp;|&nbsp;&nbsp;
-            Top Speed: <b>{top_speed} km/h</b>
-            &nbsp;&nbsp;|&nbsp;&nbsp;
-            Acceleration: <b>{acceleration:.2f}</b>
-            """
-        )
-
-    # --------------------------------------------------------
-    # Customization Controls
-    # --------------------------------------------------------
-
-    def create_customization_controls(self):
-
-        # Remove previous controls
-        while self.customization_layout.count():
-
-            item = (
-                self.customization_layout.takeAt(0)
-            )
-
-            widget = item.widget()
-
-            if widget:
-                widget.deleteLater()
-
-        if self.selected_vehicle is None:
-            return
-
-        categories = get_categories()
-
-        for row, category in enumerate(categories):
-
-            category_id = category[
-                "category_id"
-            ]
-
-            category_name = category[
-                "category_name"
-            ]
-
-            label = QLabel(
-                category_name
-            )
-
-            combo = QComboBox()
-
-            combo.addItem(
-                "Select part...",
-                None
-            )
-
-            parts = get_parts_by_category(
-                category_id
-            )
-
-            installed = get_installed_part(
-                self.selected_vehicle[
-                    "vehicle_id"
-                ],
-                category_id
-            )
-
-            installed_index = -1
-
-            for part in parts:
-
-                display = (
-                    f"{part['part_name']} "
-                    f"- ${float(part['price']):,.2f}"
+            if (
+                inventory
+                and int(inventory["quantity"]) > 0
+            ):
+                # Already owned -> install for free.
+                self.set_vehicle_part(
+                    vehicle_id,
+                    category_id,
+                    part_id
                 )
 
-                combo.addItem(
-                    display,
-                    part
+                self.db.commit()
+
+                self.installed_parts[
+                    category_id
+                ] = part
+
+                self.preview.set_part(
+                    category_name,
+                    part["sprite_file"]
+                )
+
+                self.refresh_stats()
+
+                QMessageBox.information(
+                    self,
+                    "Installed",
+                    f"{part['part_name']} "
+                    "is now installed."
+                )
+
+                return
+
+            # Check user's money.
+            user = self.db.fetchone(
+                """
+                SELECT money
+                FROM users
+                WHERE user_id = %s
+                FOR UPDATE
+                """,
+                (CURRENT_USER_ID,)
+            )
+
+            if not user:
+                raise RuntimeError(
+                    "Current user was not found."
+                )
+
+            money = float(
+                user["money"]
+            )
+
+            if money < price:
+                self.db.rollback()
+
+                QMessageBox.warning(
+                    self,
+                    "Not Enough Money",
+                    f"You need "
+                    f"₹{price:,.2f}, but only have "
+                    f"₹{money:,.2f}."
+                )
+
+                return
+
+            # Check shop stock for paid parts.
+            if price > 0:
+                stock = self.db.fetchone(
+                    """
+                    SELECT inventory_id, stock
+                    FROM shop_inventory
+                    WHERE part_id = %s
+                    FOR UPDATE
+                    """,
+                    (part_id,)
                 )
 
                 if (
-                    installed
-                    and part["part_id"]
-                    == installed["part_id"]
+                    not stock
+                    or int(stock["stock"]) <= 0
                 ):
-                    installed_index = (
-                        combo.count() - 1
+                    self.db.rollback()
+
+                    QMessageBox.warning(
+                        self,
+                        "Out of Stock",
+                        f"{part['part_name']} "
+                        "is currently out of stock."
                     )
 
-            if installed_index >= 0:
+                    return
 
-                combo.setCurrentIndex(
-                    installed_index
+                self.db.execute(
+                    """
+                    UPDATE shop_inventory
+                    SET stock = stock - 1
+                    WHERE inventory_id = %s
+                    """,
+                    (stock["inventory_id"],)
                 )
 
-            combo.currentIndexChanged.connect(
-                lambda index,
-                combo=combo,
-                category_id=category_id:
-                    self.part_changed(
-                        combo,
-                        category_id
-                    )
-            )
-
-            self.customization_layout.addWidget(
-                label,
-                row,
-                0
-            )
-
-            self.customization_layout.addWidget(
-                combo,
-                row,
-                1
-            )
-
-    # --------------------------------------------------------
-    # Part Changed
-    # --------------------------------------------------------
-
-    def part_changed(
-        self,
-        combo,
-        category_id
-    ):
-
-        if self.selected_vehicle is None:
-            return
-
-        part = combo.currentData()
-
-        if part is None:
-            return
-
-        role = self.user.get(
-            "role_name",
-            "Guest"
-        )
-
-        if role == "Guest":
-
-            QMessageBox.information(
-                self,
-                "Login Required",
-                "Please login as a Player to customize a vehicle."
-            )
-
-            return
-
-        success, message = install_part(
-            self.selected_vehicle[
-                "vehicle_id"
-            ],
-            category_id,
-            part["part_id"]
-        )
-
-        if not success:
-
-            QMessageBox.warning(
-                self,
-                "Installation Error",
-                message
-            )
-
-            return
-
-        # Refresh preview
-        self.preview.set_vehicle(
-            self.selected_vehicle[
-                "vehicle_id"
-            ]
-        )
-
-        # Refresh statistics
-        self.update_stats()
-
-    # --------------------------------------------------------
-    # Shop Page
-    # --------------------------------------------------------
-
-    def create_shop_page(self):
-
-        page = QWidget()
-
-        layout = QVBoxLayout()
-
-        title = QLabel(
-            "PARTS SHOP"
-        )
-
-        title.setFont(
-            QFont(
-                "Arial",
-                22,
-                QFont.Weight.Bold
-            )
-        )
-
-        layout.addWidget(
-            title
-        )
-
-        self.shop_list = QListWidget()
-
-        layout.addWidget(
-            self.shop_list
-        )
-
-        bottom = QHBoxLayout()
-
-        self.quantity = QSpinBox()
-
-        self.quantity.setMinimum(1)
-
-        self.quantity.setMaximum(99)
-
-        self.quantity.setValue(1)
-
-        bottom.addWidget(
-            QLabel("Quantity:")
-        )
-
-        bottom.addWidget(
-            self.quantity
-        )
-
-        buy_button = QPushButton(
-            "BUY SELECTED PART"
-        )
-
-        buy_button.clicked.connect(
-            self.buy_selected_part
-        )
-
-        bottom.addWidget(
-            buy_button
-        )
-
-        bottom.addStretch()
-
-        layout.addLayout(
-            bottom
-        )
-
-        page.setLayout(
-            layout
-        )
-
-        self.load_shop()
-
-        return page
-
-    # --------------------------------------------------------
-    # Load Shop
-    # --------------------------------------------------------
-
-    def load_shop(self):
-
-        self.shop_list.clear()
-
-        inventory = get_shop_inventory()
-
-        for item in inventory:
-
-            stock = item["stock"]
-
-            text = (
-                f"{item['category_name']} | "
-                f"{item['part_name']} | "
-                f"{item['manufacturer'] or 'Unknown'} | "
-                f"${float(item['price']):,.2f} | "
-                f"Stock: {stock}"
-            )
-
-            list_item = QListWidgetItem(
-                text
-            )
-
-            list_item.setData(
-                Qt.ItemDataRole.UserRole,
-                item
-            )
-
-            self.shop_list.addItem(
-                list_item
-            )
-
-    # --------------------------------------------------------
-    # Buy
-    # --------------------------------------------------------
-
-    def buy_selected_part(self):
-
-        if self.user["user_id"] is None:
-
-            QMessageBox.information(
-                self,
-                "Login Required",
-                "Guests cannot purchase parts."
-            )
-
-            return
-
-        selected = (
-            self.shop_list.currentItem()
-        )
-
-        if selected is None:
-
-            QMessageBox.information(
-                self,
-                "Select Part",
-                "Select a part first."
-            )
-
-            return
-
-        item = selected.data(
-            Qt.ItemDataRole.UserRole
-        )
-
-        quantity = self.quantity.value()
-
-        success, message = buy_part(
-            self.user["user_id"],
-            item["part_id"],
-            quantity
-        )
-
-        if success:
-
-            QMessageBox.information(
-                self,
-                "Purchase Complete",
-                message
-            )
-
-            # Refresh money
-            updated_user = fetch_one(
+            # Deduct money.
+            self.db.execute(
                 """
-                SELECT
-                    u.user_id,
-                    u.username,
-                    u.money,
-                    u.role_id,
-                    r.role_name
-                FROM users u
-                JOIN roles r
-                    ON u.role_id = r.role_id
-                WHERE u.user_id = %s
+                UPDATE users
+                SET money = money - %s
+                WHERE user_id = %s
                 """,
-                (self.user["user_id"],)
+                (
+                    price,
+                    CURRENT_USER_ID
+                )
             )
 
-            if updated_user:
-                self.user = updated_user
+            # Add to player inventory.
+            if inventory:
+                self.db.execute(
+                    """
+                    UPDATE player_inventory
+                    SET quantity = quantity + 1
+                    WHERE inventory_id = %s
+                    """,
+                    (inventory["inventory_id"],)
+                )
+            else:
+                self.db.execute(
+                    """
+                    INSERT INTO player_inventory
+                    (user_id, part_id, quantity)
+                    VALUES (%s, %s, 1)
+                    """,
+                    (
+                        CURRENT_USER_ID,
+                        part_id
+                    )
+                )
 
-            self.update_user_label()
+            # Purchase history.
+            self.db.execute(
+                """
+                INSERT INTO purchases
+                (user_id, part_id, quantity, total_price)
+                VALUES (%s, %s, 1, %s)
+                """,
+                (
+                    CURRENT_USER_ID,
+                    part_id,
+                    price
+                )
+            )
 
-            self.load_shop()
+            # Install the part on the vehicle.
+            self.set_vehicle_part(
+                vehicle_id,
+                category_id,
+                part_id
+            )
 
+            self.db.commit()
+
+            # Update live application state.
+            self.installed_parts[
+                category_id
+            ] = part
+
+            self.preview.set_part(
+                category_name,
+                part["sprite_file"]
+            )
+
+            self.refresh_stats()
+            self.update_money()
+
+            QMessageBox.information(
+                self,
+                "Success",
+                f"{part['part_name']} "
+                "was purchased and installed."
+            )
+
+            # Refresh "Owned" number.
+            self.part_selected(
+                self.part_list.currentItem(),
+                None
+            )
+
+        except Exception as exc:
+            self.db.rollback()
+
+            QMessageBox.critical(
+                self,
+                "Database Error",
+                str(exc)
+            )
+
+    # --------------------------------------------------------
+    # VEHICLE PART DATABASE UPDATE
+    # --------------------------------------------------------
+    def set_vehicle_part(
+        self,
+        vehicle_id,
+        category_id,
+        part_id
+    ):
+        existing = self.db.fetchone(
+            """
+            SELECT vehicle_id
+            FROM vehicle_parts
+            WHERE vehicle_id = %s
+              AND category_id = %s
+            """,
+            (
+                vehicle_id,
+                category_id
+            )
+        )
+
+        if existing:
+            self.db.execute(
+                """
+                UPDATE vehicle_parts
+                SET part_id = %s
+                WHERE vehicle_id = %s
+                  AND category_id = %s
+                """,
+                (
+                    part_id,
+                    vehicle_id,
+                    category_id
+                )
+            )
         else:
-
-            QMessageBox.warning(
-                self,
-                "Purchase Failed",
-                message
-            )
-
-    # --------------------------------------------------------
-    # User Label
-    # --------------------------------------------------------
-
-    def update_user_label(self):
-
-        role = self.user.get(
-            "role_name",
-            "Guest"
-        )
-
-        money = float(
-            self.user.get(
-                "money",
-                0
-            ) or 0
-        )
-
-        self.user_label.setText(
-            f"{self.user['username']} "
-            f"| {role} "
-            f"| ${money:,.2f}"
-        )
-
-    # --------------------------------------------------------
-    # Management
-    # --------------------------------------------------------
-
-    def open_management(self):
-
-        role = self.user.get(
-            "role_name",
-            "Guest"
-        )
-
-        if role == "Administrator":
-
-            QMessageBox.information(
-                self,
-                "Administrator",
+            self.db.execute(
                 """
-Administrator panel will contain:
-
-• User management
-• Role management
-• Manufacturer management
-• Car model management
-• Part management
-• Category management
-• Shop management
-"""
-            )
-
-        elif role == "Shop Manager":
-
-            QMessageBox.information(
-                self,
-                "Shop Manager",
-                """
-Shop Manager panel will contain:
-
-• Part prices
-• Shop stock
-• Purchase history
-• Inventory management
-"""
+                INSERT INTO vehicle_parts
+                (vehicle_id, category_id, part_id)
+                VALUES (%s, %s, %s)
+                """,
+                (
+                    vehicle_id,
+                    category_id,
+                    part_id
+                )
             )
 
     # --------------------------------------------------------
-    # Logout
+    # CLOSE
     # --------------------------------------------------------
-
-    def logout(self):
-
-        self.login_window = LoginWindow()
-
-        self.login_window.show()
-
-        self.close()
+    def closeEvent(self, event):
+        self.db.close()
+        event.accept()
 
 
 # ============================================================
 # APPLICATION START
 # ============================================================
-
 def main():
+    app = QApplication(sys.argv)
 
-    app = QApplication(
-        sys.argv
-    )
+    try:
+        db = Database()
 
-    app.setApplicationName(
-        "Car Customizer"
-    )
+        window = GarageWindow(db)
+        window.show()
 
-    login_window = LoginWindow()
+        sys.exit(app.exec())
 
-    login_window.show()
+    except Exception as exc:
+        print("Startup Error:", exc)
 
-    sys.exit(
-        app.exec()
-    )
+        QMessageBox.critical(
+            None,
+            "Startup Error",
+            str(exc)
+        )
+
+        sys.exit(1)
 
 
 if __name__ == "__main__":
