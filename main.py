@@ -37,7 +37,7 @@ DB_HOST = "127.0.0.1"
 DB_PORT = 3306
 DB_NAME = "car_customizer"
 DB_USER = "root"
-DB_PASSWORD = "P14Y3R"
+DB_PASSWORD = "" #Insert password in the quotes
 
 CURRENT_USER_ID = 3
 
