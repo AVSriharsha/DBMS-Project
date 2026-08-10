@@ -26,6 +26,9 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QInputDialog,
     QHeaderView,
+    QLineEdit,
+    QComboBox,
+    QStackedWidget,
 )
 
 
@@ -37,9 +40,7 @@ DB_HOST = "127.0.0.1"
 DB_PORT = 3306
 DB_NAME = "car_customizer"
 DB_USER = "root"
-DB_PASSWORD = "" #Insert password in the quotes
-
-CURRENT_USER_ID = 3
+DB_PASSWORD = "" #Insert password here
 
 
 # ============================================================
@@ -51,7 +52,7 @@ ASSET_DIR = os.path.join(BASE_DIR, "assets", "car")
 
 
 # ============================================================
-# ROLE NAMES
+# ROLES
 # ============================================================
 
 ROLE_GUEST = "Guest"
@@ -61,7 +62,7 @@ ROLE_ADMIN = "Administrator"
 
 
 # ============================================================
-# HELPER
+# HELPERS
 # ============================================================
 
 def money(value):
@@ -72,7 +73,7 @@ def money(value):
 
 
 # ============================================================
-# DATABASE CLASS
+# DATABASE
 # ============================================================
 
 class Database:
@@ -82,6 +83,7 @@ class Database:
         self.connect()
 
     def connect(self):
+
         self.conn = mysql.connector.connect(
             host=DB_HOST,
             port=DB_PORT,
@@ -96,9 +98,11 @@ class Database:
     def ensure_connection(self):
 
         if self.conn is None or not self.conn.is_connected():
+
             self.connect()
 
         else:
+
             self.conn.ping(
                 reconnect=True,
                 attempts=3,
@@ -109,18 +113,29 @@ class Database:
 
         self.ensure_connection()
 
-        cursor = self.conn.cursor(dictionary=True)
+        cursor = self.conn.cursor(
+            dictionary=True
+        )
 
         try:
-            cursor.execute(sql, params)
+
+            cursor.execute(
+                sql,
+                params
+            )
+
             return cursor.fetchall()
 
         finally:
+
             cursor.close()
 
     def one(self, sql, params=()):
 
-        rows = self.query(sql, params)
+        rows = self.query(
+            sql,
+            params
+        )
 
         return rows[0] if rows else None
 
@@ -131,17 +146,849 @@ class Database:
         cursor = self.conn.cursor()
 
         try:
-            cursor.execute(sql, params)
+
+            cursor.execute(
+                sql,
+                params
+            )
+
             return cursor.lastrowid
 
         finally:
+
             cursor.close()
 
     def close(self):
 
         if self.conn and self.conn.is_connected():
+
             self.conn.close()
 
+# ============================================================
+# LOGIN WINDOW — PROFESSIONAL BLACK / PURPLE UI
+# ============================================================
+
+class LoginWindow(QWidget):
+
+    def __init__(self, db, login_success_callback):
+
+        super().__init__()
+
+        self.db = db
+        self.login_success_callback = login_success_callback
+
+        self.setWindowTitle(
+            "Car Customizer — Sign In"
+        )
+
+        self.setMinimumSize(
+            560,
+            700
+        )
+
+        self.resize(
+            560,
+            700
+        )
+
+        self.setWindowFlags(
+            Qt.WindowType.Window |
+            Qt.WindowType.WindowCloseButtonHint |
+            Qt.WindowType.WindowMinimizeButtonHint
+        )
+
+        self.build_ui()
+
+        self.username_input.setFocus()
+
+    def build_ui(self):
+
+        # ====================================================
+        # MAIN LOGIN WINDOW STYLE
+        # ====================================================
+
+        self.setStyleSheet(
+            """
+            QWidget {
+                background:
+                    qlineargradient(
+                        x1:0,
+                        y1:0,
+                        x2:1,
+                        y2:1,
+                        stop:0 #050507,
+                        stop:0.45 #0b0910,
+                        stop:1 #130b1c
+                    );
+
+                color:#f4f1f8;
+                font-family:"Segoe UI";
+            }
+
+            /* ==============================================
+               LOGIN CARD
+               ============================================== */
+
+            QFrame#loginCard {
+
+                background:
+                    qlineargradient(
+                        x1:0,
+                        y1:0,
+                        x2:1,
+                        y2:1,
+                        stop:0 #111116,
+                        stop:1 #17121d
+                    );
+
+                border:1px solid #30263b;
+                border-radius:22px;
+            }
+
+            QFrame#loginCard:hover {
+
+                border:1px solid #47365a;
+            }
+
+            /* ==============================================
+               TOP PURPLE ACCENT
+               ============================================== */
+
+            QFrame#accentBar {
+
+                background:
+                    qlineargradient(
+                        x1:0,
+                        y1:0,
+                        x2:1,
+                        y2:0,
+                        stop:0 #6d28d9,
+                        stop:0.5 #8b5cf6,
+                        stop:1 #a855f7
+                    );
+
+                border:none;
+                border-radius:3px;
+            }
+
+            /* ==============================================
+               BRAND
+               ============================================== */
+
+            QLabel#brandIcon {
+
+                color:#a855f7;
+                font-size:42px;
+                font-weight:900;
+                background:transparent;
+                border:none;
+            }
+
+            QLabel#logo {
+
+                color:#ffffff;
+                font-size:28px;
+                font-weight:900;
+                background:transparent;
+                border:none;
+                letter-spacing:1px;
+            }
+
+            QLabel#subtitle {
+
+                color:#9f98a8;
+                font-size:13px;
+                background:transparent;
+                border:none;
+            }
+
+            QLabel#welcome {
+
+                color:#e9e3f0;
+                font-size:19px;
+                font-weight:700;
+                background:transparent;
+                border:none;
+            }
+
+            QLabel#loginHint {
+
+                color:#756d80;
+                font-size:12px;
+                background:transparent;
+                border:none;
+            }
+
+            /* ==============================================
+               FIELD LABELS
+               ============================================== */
+
+            QLabel#fieldLabel {
+
+                color:#bdb5c8;
+                font-size:11px;
+                font-weight:800;
+                background:transparent;
+                border:none;
+                letter-spacing:1px;
+            }
+
+            /* ==============================================
+               INPUT FIELDS
+               ============================================== */
+
+            QLineEdit {
+
+                background:#0b0a0f;
+                color:#f5f2f8;
+
+                border:1px solid #302a37;
+                border-radius:11px;
+
+                padding:
+                    0px 15px;
+
+                font-size:14px;
+
+                selection-background-color:#6d28d9;
+                selection-color:white;
+            }
+
+            QLineEdit:hover {
+
+                border:1px solid #443650;
+                background:#0d0b11;
+            }
+
+            QLineEdit:focus {
+
+                border:1px solid #8b5cf6;
+                background:#100c15;
+            }
+
+            QLineEdit::placeholder {
+
+                color:#5f5868;
+            }
+
+            /* ==============================================
+               LOGIN BUTTON
+               ============================================== */
+
+            QPushButton#loginButton {
+
+                background:
+                    qlineargradient(
+                        x1:0,
+                        y1:0,
+                        x2:1,
+                        y2:0,
+                        stop:0 #6d28d9,
+                        stop:1 #8b5cf6
+                    );
+
+                color:white;
+
+                border:1px solid #9b6cff;
+                border-radius:11px;
+
+                font-size:14px;
+                font-weight:800;
+
+                padding:12px;
+            }
+
+            QPushButton#loginButton:hover {
+
+                background:
+                    qlineargradient(
+                        x1:0,
+                        y1:0,
+                        x2:1,
+                        y2:0,
+                        stop:0 #7c3aed,
+                        stop:1 #a855f7
+                    );
+
+                border:1px solid #b78aff;
+            }
+
+            QPushButton#loginButton:pressed {
+
+                background:#5b21b6;
+            }
+
+            QPushButton#loginButton:disabled {
+
+                background:#29222f;
+                border:1px solid #3b3344;
+                color:#665e70;
+            }
+
+            /* ==============================================
+               GUEST BUTTON
+               ============================================== */
+
+            QPushButton#guestButton {
+
+                background:#111016;
+                color:#b8b0c1;
+
+                border:1px solid #342d3d;
+                border-radius:10px;
+
+                font-size:13px;
+                font-weight:700;
+
+                padding:10px;
+            }
+
+            QPushButton#guestButton:hover {
+
+                background:#17121e;
+                color:#e2d9eb;
+
+                border:1px solid #574366;
+            }
+
+            QPushButton#guestButton:pressed {
+
+                background:#0d0b10;
+            }
+
+            /* ==============================================
+               FOOTER
+               ============================================== */
+
+            QLabel#footer {
+
+                color:#514958;
+                font-size:11px;
+
+                background:transparent;
+                border:none;
+            }
+
+            /* ==============================================
+               DIVIDER
+               ============================================== */
+
+            QFrame#divider {
+
+                background:#29232f;
+                border:none;
+                max-height:1px;
+            }
+            """
+        )
+
+        # ====================================================
+        # OUTER LAYOUT
+        # ====================================================
+
+        outer = QVBoxLayout(
+            self
+        )
+
+        outer.setContentsMargins(
+            35,
+            28,
+            35,
+            28
+        )
+
+        outer.setSpacing(
+            0
+        )
+
+        # ====================================================
+        # LOGIN CARD
+        # ====================================================
+
+        card = QFrame()
+
+        card.setObjectName(
+            "loginCard"
+        )
+
+        card.setMaximumWidth(
+            455
+        )
+
+        card_layout = QVBoxLayout(
+            card
+        )
+
+        card_layout.setContentsMargins(
+            42,
+            0,
+            42,
+            30
+        )
+
+        card_layout.setSpacing(
+            0
+        )
+
+        # ====================================================
+        # PURPLE ACCENT BAR
+        # ====================================================
+
+        accent = QFrame()
+
+        accent.setObjectName(
+            "accentBar"
+        )
+
+        accent.setFixedHeight(
+            4
+        )
+
+        card_layout.addWidget(
+            accent
+        )
+
+        card_layout.addSpacing(
+            30
+        )
+
+        # ====================================================
+        # BRAND ICON
+        # ====================================================
+
+        brand_icon = QLabel(
+            "⌁"
+        )
+
+        brand_icon.setObjectName(
+            "brandIcon"
+        )
+
+        brand_icon.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        card_layout.addWidget(
+            brand_icon
+        )
+
+        card_layout.addSpacing(
+            3
+        )
+
+        # ====================================================
+        # TITLE
+        # ====================================================
+
+        logo = QLabel(
+            "CAR CUSTOMIZER"
+        )
+
+        logo.setObjectName(
+            "logo"
+        )
+
+        logo.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        card_layout.addWidget(
+            logo
+        )
+
+        subtitle = QLabel(
+            "GARAGE MANAGEMENT SYSTEM"
+        )
+
+        subtitle.setObjectName(
+            "subtitle"
+        )
+
+        subtitle.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        card_layout.addWidget(
+            subtitle
+        )
+
+        card_layout.addSpacing(
+            32
+        )
+
+        # ====================================================
+        # WELCOME
+        # ====================================================
+
+        welcome = QLabel(
+            "Welcome back"
+        )
+
+        welcome.setObjectName(
+            "welcome"
+        )
+
+        welcome.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        card_layout.addWidget(
+            welcome
+        )
+
+        card_layout.addSpacing(
+            6
+        )
+
+        login_hint = QLabel(
+            "Sign in to access your garage"
+        )
+
+        login_hint.setObjectName(
+            "loginHint"
+        )
+
+        login_hint.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        card_layout.addWidget(
+            login_hint
+        )
+
+        card_layout.addSpacing(
+            27
+        )
+
+        # ====================================================
+        # USERNAME LABEL
+        # ====================================================
+
+        username_label = QLabel(
+            "USERNAME"
+        )
+
+        username_label.setObjectName(
+            "fieldLabel"
+        )
+
+        card_layout.addWidget(
+            username_label
+        )
+
+        card_layout.addSpacing(
+            7
+        )
+
+        # ====================================================
+        # USERNAME INPUT
+        # ====================================================
+
+        self.username_input = QLineEdit()
+
+        self.username_input.setPlaceholderText(
+            "Enter your username"
+        )
+
+        self.username_input.setMinimumHeight(
+            50
+        )
+
+        self.username_input.setClearButtonEnabled(
+            True
+        )
+
+        card_layout.addWidget(
+            self.username_input
+        )
+
+        card_layout.addSpacing(
+            17
+        )
+
+        # ====================================================
+        # PASSWORD LABEL
+        # ====================================================
+
+        password_label = QLabel(
+            "PASSWORD"
+        )
+
+        password_label.setObjectName(
+            "fieldLabel"
+        )
+
+        card_layout.addWidget(
+            password_label
+        )
+
+        card_layout.addSpacing(
+            7
+        )
+
+        # ====================================================
+        # PASSWORD INPUT
+        # ====================================================
+
+        self.password_input = QLineEdit()
+
+        self.password_input.setPlaceholderText(
+            "Enter your password"
+        )
+
+        self.password_input.setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+
+        self.password_input.setMinimumHeight(
+            50
+        )
+
+        self.password_input.returnPressed.connect(
+            self.login
+        )
+
+        card_layout.addWidget(
+            self.password_input
+        )
+
+        card_layout.addSpacing(
+            24
+        )
+
+        # ====================================================
+        # LOGIN BUTTON
+        # ====================================================
+
+        login_button = QPushButton(
+            "SIGN IN"
+        )
+
+        login_button.setObjectName(
+            "loginButton"
+        )
+
+        login_button.setMinimumHeight(
+            50
+        )
+
+        login_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        login_button.clicked.connect(
+            self.login
+        )
+
+        card_layout.addWidget(
+            login_button
+        )
+
+        card_layout.addSpacing(
+            12
+        )
+
+        # ====================================================
+        # GUEST BUTTON
+        # ====================================================
+
+        guest_button = QPushButton(
+            "CONTINUE AS GUEST"
+        )
+
+        guest_button.setObjectName(
+            "guestButton"
+        )
+
+        guest_button.setMinimumHeight(
+            44
+        )
+
+        guest_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        guest_button.clicked.connect(
+            self.login_guest
+        )
+
+        card_layout.addWidget(
+            guest_button
+        )
+
+        card_layout.addSpacing(
+            22
+        )
+
+        # ====================================================
+        # DIVIDER
+        # ====================================================
+
+        divider = QFrame()
+
+        divider.setObjectName(
+            "divider"
+        )
+
+        divider.setFrameShape(
+            QFrame.Shape.HLine
+        )
+
+        divider.setFixedHeight(
+            1
+        )
+
+        card_layout.addWidget(
+            divider
+        )
+
+        card_layout.addSpacing(
+            15
+        )
+
+        # ====================================================
+        # ACCOUNT HINT
+        # ====================================================
+
+        hint = QLabel(
+            "Available accounts:  Admin  •  Manager  •  Player"
+        )
+
+        hint.setObjectName(
+            "footer"
+        )
+
+        hint.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        hint.setWordWrap(
+            True
+        )
+
+        card_layout.addWidget(
+            hint
+        )
+
+        # ====================================================
+        # ADD CARD TO WINDOW
+        # ====================================================
+
+        outer.addStretch(
+            1
+        )
+
+        outer.addWidget(
+            card,
+            alignment=Qt.AlignmentFlag.AlignHCenter
+        )
+
+        outer.addStretch(
+            1
+        )
+
+    # ========================================================
+    # LOGIN
+    # ========================================================
+
+    def login(self):
+
+        username = self.username_input.text().strip()
+
+        password = self.password_input.text()
+
+        if not username or not password:
+
+            QMessageBox.warning(
+                self,
+                "Login Required",
+                "Please enter both username and password."
+            )
+
+            if not username:
+
+                self.username_input.setFocus()
+
+            else:
+
+                self.password_input.setFocus()
+
+            return
+
+        try:
+
+            user = self.db.one(
+                """
+                SELECT
+                    u.user_id,
+                    u.username,
+                    u.money,
+                    u.role_id,
+                    r.role_name
+                FROM users u
+                JOIN roles r
+                    ON r.role_id = u.role_id
+                WHERE u.username = %s
+                  AND u.password = %s
+                """,
+                (
+                    username,
+                    password
+                )
+            )
+
+            if not user:
+
+                QMessageBox.warning(
+                    self,
+                    "Login Failed",
+                    "Invalid username or password."
+                )
+
+                self.password_input.clear()
+
+                self.password_input.setFocus()
+
+                return
+
+            print(
+                f"Logged in as {user['username']} "
+                f"(user_id={user['user_id']})"
+            )
+
+            self.login_success_callback(
+                user
+            )
+
+        except Exception as exc:
+
+            QMessageBox.critical(
+                self,
+                "Login Error",
+                str(exc)
+            )
+
+    # ========================================================
+    # GUEST LOGIN
+    # ========================================================
+
+    def login_guest(self):
+
+        guest = {
+            "user_id": None,
+            "username": "Guest",
+            "money": Decimal("0"),
+            "role_id": None,
+            "role_name": ROLE_GUEST
+        }
+
+        print(
+            "Continuing as Guest"
+        )
+
+        self.login_success_callback(
+            guest
+        )
 
 # ============================================================
 # PART BUTTON
@@ -159,7 +1006,9 @@ class PartButton(QPushButton):
             Qt.CursorShape.PointingHandCursor
         )
 
-        self.setMinimumHeight(78)
+        self.setMinimumHeight(
+            78
+        )
 
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -167,38 +1016,64 @@ class PartButton(QPushButton):
         )
 
         price = Decimal(
-            str(part.get("price", 0) or 0)
+            str(
+                part.get(
+                    "price",
+                    0
+                ) or 0
+            )
         )
 
         hp = int(
-            part.get("hp_bonus", 0) or 0
+            part.get(
+                "hp_bonus",
+                0
+            ) or 0
         )
 
         weight = int(
-            part.get("weight_change", 0) or 0
+            part.get(
+                "weight_change",
+                0
+            ) or 0
         )
 
         speed = int(
-            part.get("top_speed_bonus", 0) or 0
+            part.get(
+                "top_speed_bonus",
+                0
+            ) or 0
         )
 
         stock = int(
-            part.get("stock", 0) or 0
+            part.get(
+                "stock",
+                0
+            ) or 0
         )
 
         extras = []
 
         if hp:
-            extras.append(f"HP {hp:+d}")
+            extras.append(
+                f"HP {hp:+d}"
+            )
 
         if speed:
-            extras.append(f"Speed {speed:+d}")
+            extras.append(
+                f"Speed {speed:+d}"
+            )
 
         if weight:
-            extras.append(f"Weight {weight:+d}")
+            extras.append(
+                f"Weight {weight:+d}"
+            )
 
         if not extras:
-            extras.append("Stock / Standard")
+
+            extras.append(
+                "Standard"
+            )
 
         self.setText(
             f"{part['part_name']}\n"
@@ -209,14 +1084,22 @@ class PartButton(QPushButton):
 
 
 # ============================================================
-# PURCHASE HISTORY DIALOG
+# PURCHASE HISTORY
 # ============================================================
 
 class PurchaseHistoryDialog(QDialog):
 
-    def __init__(self, db, user_id, username, parent=None):
+    def __init__(
+        self,
+        db,
+        user_id,
+        username,
+        parent=None
+    ):
 
-        super().__init__(parent)
+        super().__init__(
+            parent
+        )
 
         self.db = db
         self.user_id = user_id
@@ -225,53 +1108,61 @@ class PurchaseHistoryDialog(QDialog):
             f"Purchase History — {username}"
         )
 
-        self.resize(950, 600)
+        self.resize(
+            950,
+            600
+        )
 
         self.setStyleSheet(
             """
             QDialog {
-                background: #17191d;
+                background:;#09070d
+                color:#e8edf2;
             }
 
             QLabel {
-                color: #e8edf2;
+                color:#e8edf2;
             }
 
             QTableWidget {
-                background: #20242a;
-                color: #e8edf2;
-                border: 1px solid #454c55;
-                gridline-color: #3d444c;
-                selection-background-color: #66502f;
-                selection-color: white;
+                background:#181520;
+                color:#e8edf2;
+                border:1px solid #454c55;
+                gridline-color:#3d444c;
+                selection-background-color:#66502f;
+                selection-color:white;
             }
 
             QHeaderView::section {
-                background: #30363e;
-                color: #f0f2f4;
-                padding: 8px;
-                border: 1px solid #454c55;
-                font-weight: bold;
+                background:#30363e;
+                color:#f0f2f4;
+                padding:8px;
+                border:1px solid #454c55;
+                font-weight:bold;
             }
 
             QPushButton {
-                background: #39424b;
-                color: white;
-                border: 1px solid #65717d;
-                border-radius: 8px;
-                padding: 9px 18px;
-                font-weight: bold;
+                background:#251d31;
+                color:white;
+                border:1px solid #68517f;
+                border-radius:8px;
+                padding:9px 18px;
+                font-weight:bold;
             }
 
             QPushButton:hover {
-                background: #4a5662;
+                background:#4a5662;
             }
             """
         )
 
-        layout = QVBoxLayout(self)
+        layout = QVBoxLayout(
+            self
+        )
 
-        title = QLabel("PURCHASE HISTORY")
+        title = QLabel(
+            "PURCHASE HISTORY"
+        )
 
         title.setFont(
             QFont(
@@ -282,26 +1173,28 @@ class PurchaseHistoryDialog(QDialog):
         )
 
         title.setStyleSheet(
-            "color:#ffb55c;"
+            "color:#c4b5fd;"
         )
 
-        layout.addWidget(title)
+        layout.addWidget(
+            title
+        )
 
         self.summary_label = QLabel()
 
         self.summary_label.setStyleSheet(
-            """
-            color:#c5ccd4;
-            font-size:14px;
-            padding:5px;
-            """
+            "color:#b8afc4;font-size:14px;padding:5px;"
         )
 
-        layout.addWidget(self.summary_label)
+        layout.addWidget(
+            self.summary_label
+        )
 
         self.table = QTableWidget()
 
-        self.table.setColumnCount(6)
+        self.table.setColumnCount(
+            6
+        )
 
         self.table.setHorizontalHeaderLabels(
             [
@@ -322,21 +1215,22 @@ class PurchaseHistoryDialog(QDialog):
             QTableWidget.SelectionBehavior.SelectRows
         )
 
-        self.table.horizontalHeader().setStretchLastSection(True)
-
         self.table.horizontalHeader().setSectionResizeMode(
             0,
             QHeaderView.ResizeMode.Stretch
         )
 
-        for column in (1, 2, 3, 4, 5):
+        for index in range(1, 6):
 
             self.table.horizontalHeader().setSectionResizeMode(
-                column,
+                index,
                 QHeaderView.ResizeMode.ResizeToContents
             )
 
-        layout.addWidget(self.table, 1)
+        layout.addWidget(
+            self.table,
+            1
+        )
 
         bottom = QHBoxLayout()
 
@@ -351,30 +1245,42 @@ class PurchaseHistoryDialog(QDialog):
         )
 
         self.total_label.setStyleSheet(
-            "color:#ffd166;"
+            "color:#c4b5fd;"
         )
 
-        bottom.addWidget(self.total_label)
+        bottom.addWidget(
+            self.total_label
+        )
 
         bottom.addStretch()
 
-        refresh_button = QPushButton("REFRESH")
+        refresh = QPushButton(
+            "REFRESH"
+        )
 
-        refresh_button.clicked.connect(
+        refresh.clicked.connect(
             self.load_history
         )
 
-        bottom.addWidget(refresh_button)
+        bottom.addWidget(
+            refresh
+        )
 
-        close_button = QPushButton("CLOSE")
+        close = QPushButton(
+            "CLOSE"
+        )
 
-        close_button.clicked.connect(
+        close.clicked.connect(
             self.accept
         )
 
-        bottom.addWidget(close_button)
+        bottom.addWidget(
+            close
+        )
 
-        layout.addLayout(bottom)
+        layout.addLayout(
+            bottom
+        )
 
         self.load_history()
 
@@ -400,33 +1306,42 @@ class PurchaseHistoryDialog(QDialog):
                 ORDER BY pu.purchase_date DESC,
                          pu.purchase_id DESC
                 """,
-                (self.user_id,)
+                (
+                    self.user_id,
+                )
             )
 
-            self.table.setRowCount(len(rows))
+            self.table.setRowCount(
+                len(rows)
+            )
 
             total_spent = Decimal("0")
             total_items = 0
 
             for r, row in enumerate(rows):
 
-                quantity = int(row["quantity"] or 0)
+                quantity = int(
+                    row["quantity"] or 0
+                )
 
                 amount = Decimal(
-                    str(row["total_price"] or 0)
+                    str(
+                        row["total_price"] or 0
+                    )
                 )
 
                 total_spent += amount
                 total_items += quantity
 
-                purchase_date = row["purchase_date"]
+                date = row["purchase_date"]
 
-                if purchase_date:
-                    date_text = purchase_date.strftime(
+                date_text = (
+                    date.strftime(
                         "%d-%m-%Y %H:%M"
                     )
-                else:
-                    date_text = "-"
+                    if date
+                    else "-"
+                )
 
                 values = [
                     row["part_name"],
@@ -442,7 +1357,9 @@ class PurchaseHistoryDialog(QDialog):
                     self.table.setItem(
                         r,
                         c,
-                        QTableWidgetItem(str(value))
+                        QTableWidgetItem(
+                            str(value)
+                        )
                     )
 
             self.summary_label.setText(
@@ -464,7 +1381,7 @@ class PurchaseHistoryDialog(QDialog):
 
 
 # ============================================================
-# MANAGEMENT DIALOG
+# MANAGEMENT
 # ============================================================
 
 class ManagementDialog(QDialog):
@@ -476,7 +1393,9 @@ class ManagementDialog(QDialog):
         parent=None
     ):
 
-        super().__init__(parent)
+        super().__init__(
+            parent
+        )
 
         self.db = db
         self.role_name = role_name
@@ -485,9 +1404,67 @@ class ManagementDialog(QDialog):
             f"{role_name} Management"
         )
 
-        self.resize(1000, 650)
+        self.resize(
+            1050,
+            680
+        )
 
-        layout = QVBoxLayout(self)
+        self.setStyleSheet(
+            """
+            QDialog {
+                background:#09070d;
+                color:#e8edf2;
+            }
+
+            QTabWidget::pane {
+                border:1px solid #424a54;
+                background:#181520;
+            }
+
+            QTabBar::tab {
+                background:#2d333a;
+                color:#cfd5db;
+                padding:10px 18px;
+                border:1px solid #424a54;
+            }
+
+            QTabBar::tab:selected {
+                background:#8b5cf6;
+                color:white;
+            }
+
+            QTableWidget {
+                background:#181520;
+                color:#e8edf2;
+                gridline-color:#3d444c;
+                border:1px solid #424a54;
+            }
+
+            QHeaderView::section {
+                background:#30363e;
+                color:white;
+                padding:8px;
+                font-weight:bold;
+            }
+
+            QPushButton {
+                background:#251d31;
+                color:white;
+                border:1px solid #68517f;
+                border-radius:8px;
+                padding:9px 14px;
+                font-weight:bold;
+            }
+
+            QPushButton:hover {
+                background:#4a5662;
+            }
+            """
+        )
+
+        layout = QVBoxLayout(
+            self
+        )
 
         title = QLabel(
             f"{role_name.upper()} MANAGEMENT"
@@ -502,14 +1479,18 @@ class ManagementDialog(QDialog):
         )
 
         title.setStyleSheet(
-            "color:#ffb55c;"
+            "color:#c4b5fd;"
         )
 
-        layout.addWidget(title)
+        layout.addWidget(
+            title
+        )
 
         self.tabs = QTabWidget()
 
-        layout.addWidget(self.tabs)
+        layout.addWidget(
+            self.tabs
+        )
 
         if role_name in (
             ROLE_SHOP_MANAGER,
@@ -524,53 +1505,61 @@ class ManagementDialog(QDialog):
             self.build_users_tab()
             self.build_roles_tab()
 
-    # ========================================================
-    # SHOP INVENTORY
-    # ========================================================
-
     def build_shop_tab(self):
 
         tab = QWidget()
 
-        layout = QVBoxLayout(tab)
+        layout = QVBoxLayout(
+            tab
+        )
 
         self.shop_table = QTableWidget()
 
-        layout.addWidget(self.shop_table)
+        layout.addWidget(
+            self.shop_table
+        )
 
         buttons = QHBoxLayout()
 
-        restock_button = QPushButton(
+        restock = QPushButton(
             "RESTOCK SELECTED"
         )
 
-        restock_button.clicked.connect(
+        restock.clicked.connect(
             self.restock_selected
         )
 
-        buttons.addWidget(restock_button)
+        buttons.addWidget(
+            restock
+        )
 
-        price_button = QPushButton(
+        price = QPushButton(
             "CHANGE PRICE"
         )
 
-        price_button.clicked.connect(
+        price.clicked.connect(
             self.change_price
         )
 
-        buttons.addWidget(price_button)
+        buttons.addWidget(
+            price
+        )
 
-        refresh_button = QPushButton(
+        refresh = QPushButton(
             "REFRESH"
         )
 
-        refresh_button.clicked.connect(
+        refresh.clicked.connect(
             self.load_shop_inventory
         )
 
-        buttons.addWidget(refresh_button)
+        buttons.addWidget(
+            refresh
+        )
 
-        layout.addLayout(buttons)
+        layout.addLayout(
+            buttons
+        )
 
         self.tabs.addTab(
             tab,
@@ -596,8 +1585,13 @@ class ManagementDialog(QDialog):
             """
         )
 
-        self.shop_table.setRowCount(len(rows))
-        self.shop_table.setColumnCount(5)
+        self.shop_table.setColumnCount(
+            5
+        )
+
+        self.shop_table.setRowCount(
+            len(rows)
+        )
 
         self.shop_table.setHorizontalHeaderLabels(
             [
@@ -624,7 +1618,9 @@ class ManagementDialog(QDialog):
                 self.shop_table.setItem(
                     r,
                     c,
-                    QTableWidgetItem(str(value))
+                    QTableWidgetItem(
+                        str(value)
+                    )
                 )
 
         self.shop_table.resizeColumnsToContents()
@@ -653,7 +1649,7 @@ class ManagementDialog(QDialog):
         amount, ok = QInputDialog.getInt(
             self,
             "Restock",
-            "How many units should be added?",
+            "Units to add:",
             10,
             1,
             1000
@@ -670,13 +1666,10 @@ class ManagementDialog(QDialog):
                 SET stock = stock + %s
                 WHERE part_id = %s
                 """,
-                (amount, part_id)
-            )
-
-            QMessageBox.information(
-                self,
-                "Restocked",
-                "Shop inventory updated."
+                (
+                    amount,
+                    part_id
+                )
             )
 
             self.load_shop_inventory()
@@ -710,7 +1703,7 @@ class ManagementDialog(QDialog):
             ).text()
         )
 
-        current_price_text = (
+        current = (
             self.shop_table.item(
                 row,
                 3
@@ -720,15 +1713,15 @@ class ManagementDialog(QDialog):
         )
 
         try:
-            current_price = float(current_price_text)
+            current = float(current)
         except Exception:
-            current_price = 0.0
+            current = 0
 
         price, ok = QInputDialog.getDouble(
             self,
             "Change Price",
             "New price:",
-            current_price,
+            current,
             0,
             100000000,
             2
@@ -745,13 +1738,10 @@ class ManagementDialog(QDialog):
                 SET price = %s
                 WHERE part_id = %s
                 """,
-                (price, part_id)
-            )
-
-            QMessageBox.information(
-                self,
-                "Price Updated",
-                "Part price updated successfully."
+                (
+                    price,
+                    part_id
+                )
             )
 
             self.load_shop_inventory()
@@ -764,19 +1754,19 @@ class ManagementDialog(QDialog):
                 str(exc)
             )
 
-    # ========================================================
-    # PARTS TAB
-    # ========================================================
-
     def build_parts_tab(self):
 
         tab = QWidget()
 
-        layout = QVBoxLayout(tab)
+        layout = QVBoxLayout(
+            tab
+        )
 
         self.parts_table = QTableWidget()
 
-        layout.addWidget(self.parts_table)
+        layout.addWidget(
+            self.parts_table
+        )
 
         refresh = QPushButton(
             "REFRESH PARTS"
@@ -786,7 +1776,9 @@ class ManagementDialog(QDialog):
             self.load_parts_table
         )
 
-        layout.addWidget(refresh)
+        layout.addWidget(
+            refresh
+        )
 
         self.tabs.addTab(
             tab,
@@ -815,8 +1807,13 @@ class ManagementDialog(QDialog):
             """
         )
 
-        self.parts_table.setRowCount(len(rows))
-        self.parts_table.setColumnCount(8)
+        self.parts_table.setColumnCount(
+            8
+        )
+
+        self.parts_table.setRowCount(
+            len(rows)
+        )
 
         self.parts_table.setHorizontalHeaderLabels(
             [
@@ -849,24 +1846,26 @@ class ManagementDialog(QDialog):
                 self.parts_table.setItem(
                     r,
                     c,
-                    QTableWidgetItem(str(value))
+                    QTableWidgetItem(
+                        str(value)
+                    )
                 )
 
         self.parts_table.resizeColumnsToContents()
-
-    # ========================================================
-    # USERS TAB
-    # ========================================================
 
     def build_users_tab(self):
 
         tab = QWidget()
 
-        layout = QVBoxLayout(tab)
+        layout = QVBoxLayout(
+            tab
+        )
 
         self.users_table = QTableWidget()
 
-        layout.addWidget(self.users_table)
+        layout.addWidget(
+            self.users_table
+        )
 
         change_role = QPushButton(
             "CHANGE SELECTED USER ROLE"
@@ -876,7 +1875,9 @@ class ManagementDialog(QDialog):
             self.change_user_role
         )
 
-        layout.addWidget(change_role)
+        layout.addWidget(
+            change_role
+        )
 
         refresh = QPushButton(
             "REFRESH USERS"
@@ -886,7 +1887,9 @@ class ManagementDialog(QDialog):
             self.load_users
         )
 
-        layout.addWidget(refresh)
+        layout.addWidget(
+            refresh
+        )
 
         self.tabs.addTab(
             tab,
@@ -911,8 +1914,13 @@ class ManagementDialog(QDialog):
             """
         )
 
-        self.users_table.setRowCount(len(rows))
-        self.users_table.setColumnCount(4)
+        self.users_table.setColumnCount(
+            4
+        )
+
+        self.users_table.setRowCount(
+            len(rows)
+        )
 
         self.users_table.setHorizontalHeaderLabels(
             [
@@ -937,7 +1945,9 @@ class ManagementDialog(QDialog):
                 self.users_table.setItem(
                     r,
                     c,
-                    QTableWidgetItem(str(value))
+                    QTableWidgetItem(
+                        str(value)
+                    )
                 )
 
         self.users_table.resizeColumnsToContents()
@@ -947,13 +1957,6 @@ class ManagementDialog(QDialog):
         row = self.users_table.currentRow()
 
         if row < 0:
-
-            QMessageBox.warning(
-                self,
-                "No Selection",
-                "Select a user first."
-            )
-
             return
 
         user_id = int(
@@ -971,7 +1974,7 @@ class ManagementDialog(QDialog):
             """
         )
 
-        role_names = [
+        names = [
             r["role_name"]
             for r in roles
         ]
@@ -979,8 +1982,8 @@ class ManagementDialog(QDialog):
         selected, ok = QInputDialog.getItem(
             self,
             "Change Role",
-            "Select new role:",
-            role_names,
+            "New role:",
+            names,
             0,
             False
         )
@@ -1002,13 +2005,10 @@ class ManagementDialog(QDialog):
                 SET role_id = %s
                 WHERE user_id = %s
                 """,
-                (role_id, user_id)
-            )
-
-            QMessageBox.information(
-                self,
-                "Role Updated",
-                "User role changed successfully."
+                (
+                    role_id,
+                    user_id
+                )
             )
 
             self.load_users()
@@ -1021,19 +2021,21 @@ class ManagementDialog(QDialog):
                 str(exc)
             )
 
-    # ========================================================
-    # ROLES TAB
-    # ========================================================
-
     def build_roles_tab(self):
 
         tab = QWidget()
 
-        layout = QVBoxLayout(tab)
+        layout = QVBoxLayout(
+            tab
+        )
 
-        self.roles_table = QTableWidget()
+        table = QTableWidget()
 
-        layout.addWidget(self.roles_table)
+        self.roles_table = table
+
+        layout.addWidget(
+            table
+        )
 
         refresh = QPushButton(
             "REFRESH ROLES"
@@ -1043,7 +2045,9 @@ class ManagementDialog(QDialog):
             self.load_roles
         )
 
-        layout.addWidget(refresh)
+        layout.addWidget(
+            refresh
+        )
 
         self.tabs.addTab(
             tab,
@@ -1062,8 +2066,13 @@ class ManagementDialog(QDialog):
             """
         )
 
-        self.roles_table.setRowCount(len(rows))
-        self.roles_table.setColumnCount(2)
+        self.roles_table.setColumnCount(
+            2
+        )
+
+        self.roles_table.setRowCount(
+            len(rows)
+        )
 
         self.roles_table.setHorizontalHeaderLabels(
             [
@@ -1094,18 +2103,24 @@ class ManagementDialog(QDialog):
 
 
 # ============================================================
-# MAIN GARAGE WINDOW
+# GARAGE WINDOW
 # ============================================================
 
 class GarageWindow(QMainWindow):
 
-    def __init__(self):
+    def __init__(
+        self,
+        db,
+        user,
+        switch_user_callback
+    ):
 
         super().__init__()
 
-        self.db = Database()
+        self.db = db
+        self.user = user
+        self.switch_user_callback = switch_user_callback
 
-        self.user = None
         self.current_vehicle = None
 
         self.categories = []
@@ -1117,15 +2132,26 @@ class GarageWindow(QMainWindow):
         self.current_category_id = None
         self.selected_part = None
 
-        self.role_name = ROLE_GUEST
+        self.role_name = (
+            user.get(
+                "role_name"
+            )
+            or ROLE_GUEST
+        )
 
         self.setWindowTitle(
             "Car Customizer Garage"
         )
 
-        self.resize(1450, 850)
+        self.resize(
+            1450,
+            850
+        )
 
-        self.setMinimumSize(1100, 700)
+        self.setMinimumSize(
+            1100,
+            700
+        )
 
         self.load_user_and_vehicle()
 
@@ -1142,41 +2168,28 @@ class GarageWindow(QMainWindow):
         self.refresh_car_preview()
 
     # ========================================================
-    # DATABASE LOADING
+    # VEHICLE
     # ========================================================
 
     def load_user_and_vehicle(self):
 
-        self.user = self.db.one(
-            """
-            SELECT
-                u.user_id,
-                u.username,
-                u.money,
-                u.role_id,
-                r.role_name
-            FROM users u
-            JOIN roles r
-                ON r.role_id = u.role_id
-            WHERE u.user_id = %s
-            """,
-            (CURRENT_USER_ID,)
-        )
+        if not self.user.get("user_id"):
 
-        if not self.user:
+            self.current_vehicle = {
+                "vehicle_id": None,
+                "user_id": None,
+                "nickname": "Guest Vehicle",
+                "model_id": 1,
+                "model_name": "Guest Preview",
+                "base_hp": 100,
+                "base_weight": 1000,
+                "base_top_speed": 150,
+                "base_acceleration": Decimal("10")
+            }
 
-            raise RuntimeError(
-                f"No user with user_id={CURRENT_USER_ID} exists."
-            )
+            return
 
-        self.role_name = (
-            self.user["role_name"]
-            or ROLE_GUEST
-        )
-
-        # ----------------------------------------------------
-        # FIRST TRY TO LOAD THE USER'S OWN VEHICLE
-        # ----------------------------------------------------
+        user_id = self.user["user_id"]
 
         self.current_vehicle = self.db.one(
             """
@@ -1197,60 +2210,78 @@ class GarageWindow(QMainWindow):
             ORDER BY v.vehicle_id
             LIMIT 1
             """,
-            (CURRENT_USER_ID,)
+            (
+                user_id,
+            )
         )
 
-        # ----------------------------------------------------
-        # ADMIN / MANAGER FALLBACK
-        #
-        # Admin and manager do not need their own vehicle to
-        # access management. If they don't have one, use an
-        # existing vehicle only for the garage preview.
-        # ----------------------------------------------------
+        if self.current_vehicle:
 
-        if not self.current_vehicle and self.role_name in (
-            ROLE_ADMIN,
-            ROLE_SHOP_MANAGER
-        ):
-
-            self.current_vehicle = self.db.one(
-                """
-                SELECT
-                    v.vehicle_id,
-                    v.user_id,
-                    v.nickname,
-                    v.model_id,
-                    cm.model_name,
-                    cm.base_hp,
-                    cm.base_weight,
-                    cm.base_top_speed,
-                    cm.base_acceleration
-                FROM vehicles v
-                JOIN car_models cm
-                    ON cm.model_id = v.model_id
-                ORDER BY v.vehicle_id
-                LIMIT 1
-                """
-            )
-
-            if self.current_vehicle:
-
-                print(
-                    f"{self.role_name} has no personal vehicle. "
-                    f"Using vehicle_id="
-                    f"{self.current_vehicle['vehicle_id']} "
-                    f"for preview/management."
-                )
+            return
 
         # ----------------------------------------------------
-        # PLAYER STILL REQUIRES A VEHICLE
+        # CREATE DEFAULT VEHICLE
         # ----------------------------------------------------
 
-        if not self.current_vehicle:
+        model = self.db.one(
+            """
+            SELECT
+                model_id,
+                model_name,
+                base_hp,
+                base_weight,
+                base_top_speed,
+                base_acceleration
+            FROM car_models
+            ORDER BY model_id
+            LIMIT 1
+            """
+        )
+
+        if not model:
 
             raise RuntimeError(
-                f"No vehicle exists for user_id={CURRENT_USER_ID}."
+                "No car model exists in the car_models table."
             )
+
+        vehicle_id = self.db.execute(
+            """
+            INSERT INTO vehicles
+                (
+                    user_id,
+                    model_id,
+                    nickname
+                )
+            VALUES
+                (
+                    %s,
+                    %s,
+                    %s
+                )
+            """,
+            (
+                user_id,
+                model["model_id"],
+                f"{self.user['username'].title()}'s Car"
+            )
+        )
+
+        print(
+            f"Created default vehicle "
+            f"{vehicle_id} for user_id={user_id}"
+        )
+
+        self.current_vehicle = {
+            "vehicle_id": vehicle_id,
+            "user_id": user_id,
+            "nickname": f"{self.user['username'].title()}'s Car",
+            "model_id": model["model_id"],
+            "model_name": model["model_name"],
+            "base_hp": model["base_hp"],
+            "base_weight": model["base_weight"],
+            "base_top_speed": model["base_top_speed"],
+            "base_acceleration": model["base_acceleration"]
+        }
 
     def load_categories(self):
 
@@ -1296,12 +2327,24 @@ class GarageWindow(QMainWindow):
             WHERE p.category_id = %s
             ORDER BY p.price, p.part_id
             """,
-            (self.current_category_id,)
+            (
+                self.current_category_id,
+            )
         )
 
     def load_installed_parts(self):
 
         self.installed_parts = {}
+
+        if not self.current_vehicle:
+            return
+
+        vehicle_id = self.current_vehicle.get(
+            "vehicle_id"
+        )
+
+        if not vehicle_id:
+            return
 
         rows = self.db.query(
             """
@@ -1327,7 +2370,7 @@ class GarageWindow(QMainWindow):
             WHERE vp.vehicle_id = %s
             """,
             (
-                self.current_vehicle["vehicle_id"],
+                vehicle_id,
             )
         )
 
@@ -1337,6 +2380,9 @@ class GarageWindow(QMainWindow):
                 row["category_id"]
             ] = row
 
+        # IMPORTANT:
+        # Preview starts from what is actually installed.
+        # Selecting a category does NOT replace the preview.
         self.preview_parts = dict(
             self.installed_parts
         )
@@ -1349,9 +2395,13 @@ class GarageWindow(QMainWindow):
 
         central = QWidget()
 
-        self.setCentralWidget(central)
+        self.setCentralWidget(
+            central
+        )
 
-        main = QVBoxLayout(central)
+        main = QVBoxLayout(
+            central
+        )
 
         main.setContentsMargins(
             18,
@@ -1360,27 +2410,38 @@ class GarageWindow(QMainWindow):
             18
         )
 
-        main.setSpacing(14)
+        main.setSpacing(
+            14
+        )
 
-        # ====================================================
+        # ----------------------------------------------------
         # HEADER
-        # ====================================================
+        # ----------------------------------------------------
 
         header = QFrame()
 
-        header.setObjectName("header")
+        header.setObjectName(
+            "header"
+        )
 
         header.setStyleSheet(
             """
             QFrame#header {
-                background: rgba(20, 23, 28, 235);
-                border: 1px solid #444a52;
-                border-radius: 14px;
+                background:#121019;
+                border:1px solid #30263d;
+                border-radius:15px;
+            }
+
+            QLabel {
+                background:transparent;
+                border:none;
             }
             """
         )
 
-        h = QHBoxLayout(header)
+        h = QHBoxLayout(
+            header
+        )
 
         h.setContentsMargins(
             20,
@@ -1396,120 +2457,167 @@ class GarageWindow(QMainWindow):
         title.setFont(
             QFont(
                 "Segoe UI",
-                20,
+                21,
                 QFont.Weight.Bold
             )
         )
 
-        subtitle = QLabel(
+        title.setStyleSheet(
+            "color:#c4b5fd;"
+        )
+
+        h.addWidget(
+            title
+        )
+
+        vehicle_info = QLabel(
             f"{self.current_vehicle['nickname']}  •  "
             f"{self.current_vehicle['model_name']}"
         )
 
-        subtitle.setStyleSheet(
-            "color:#b9c0c8; font-size:14px;"
+        vehicle_info.setStyleSheet(
+            "color:#a9a1b5;font-size:14px;"
         )
+
+        h.addWidget(
+            vehicle_info
+        )
+
+        h.addStretch()
 
         self.role_label = QLabel(
             f"ROLE: {self.role_name.upper()}"
         )
 
-        self.role_label.setFont(
-            QFont(
-                "Segoe UI",
-                11,
-                QFont.Weight.Bold
-            )
-        )
-
         self.role_label.setStyleSheet(
             """
-            color:#ffb55c;
-            background:#292f36;
-            border:1px solid #4a515b;
+            color:#c4b5fd;
+            background:#1b1624;
+            border:1px solid #49385e;
             border-radius:8px;
             padding:7px 10px;
+            font-weight:bold;
             """
+        )
+
+        h.addWidget(
+            self.role_label
         )
 
         self.money_label = QLabel()
 
-        self.money_label.setFont(
-            QFont(
-                "Segoe UI",
-                16,
-                QFont.Weight.Bold
-            )
-        )
-
         self.money_label.setStyleSheet(
-            "color:#ffd166;"
+            "color:#c4b5fd;font-size:16px;font-weight:bold;"
         )
 
-        h.addWidget(title)
+        h.addWidget(
+            self.money_label
+        )
 
-        h.addSpacing(20)
+        switch_button = QPushButton(
+            "⇄  SWITCH USER"
+        )
 
-        h.addWidget(subtitle)
+        switch_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
 
-        h.addStretch()
+        switch_button.setMinimumHeight(
+            38
+        )
 
-        h.addWidget(self.role_label)
+        switch_button.clicked.connect(
+            self.switch_user
+        )
 
-        h.addSpacing(12)
+        switch_button.setStyleSheet(
+            """
+            QPushButton {
+                background:#211a2c;
+                color:#e9edf1;
+                border:1px solid #68517f;
+                border-radius:8px;
+                padding:8px 12px;
+                font-weight:bold;
+            }
 
-        h.addWidget(self.money_label)
+            QPushButton:hover {
+                background:#414c57;
+            }
+            """
+        )
 
-        main.addWidget(header)
+        h.addWidget(
+            switch_button
+        )
 
-        # ====================================================
+        main.addWidget(
+            header
+        )
+
+        # ----------------------------------------------------
         # CONTENT
-        # ====================================================
+        # ----------------------------------------------------
 
         content = QHBoxLayout()
 
-        content.setSpacing(14)
+        content.setSpacing(
+            14
+        )
 
-        main.addLayout(content, 1)
+        main.addLayout(
+            content,
+            1
+        )
 
-        # ====================================================
-        # CATEGORIES
-        # ====================================================
+        # ----------------------------------------------------
+        # LEFT
+        # ----------------------------------------------------
 
         left = QFrame()
 
-        left.setFixedWidth(185)
+        left.setFixedWidth(
+            190
+        )
 
         left.setStyleSheet(
             """
             QFrame {
-                background: rgba(20, 23, 28, 235);
-                border: 1px solid #444a52;
-                border-radius: 14px;
+                background:#121019;
+                border:1px solid #30263d;
+                border-radius:15px;
+            }
+
+            QLabel {
+                background:transparent;
+                border:none;
             }
 
             QPushButton {
-                background: #292f36;
-                border: 1px solid #4a515b;
-                border-radius: 9px;
-                padding: 12px;
-                text-align: left;
-                font-size: 14px;
+                background:#1b1624;
+                color:#dce1e6;
+                border:1px solid #49385e;
+                border-radius:9px;
+                padding:12px;
+                text-align:left;
+                font-size:14px;
             }
 
             QPushButton:hover {
-                background: #353c45;
+                background:#2a2038;
             }
 
             QPushButton:checked {
-                background: #d98b32;
-                color: white;
-                border-color: #ffb55c;
+                background:#8b5cf6;
+                color:white;
+                border-color:#c4b5fd;
             }
             """
         )
 
-        left_layout = QVBoxLayout(left)
+        left_layout = QVBoxLayout(
+            left
+        )
 
         left_layout.setContentsMargins(
             12,
@@ -1518,23 +2626,21 @@ class GarageWindow(QMainWindow):
             12
         )
 
-        cat_title = QLabel("CATEGORIES")
-
-        cat_title.setFont(
-            QFont(
-                "Segoe UI",
-                11,
-                QFont.Weight.Bold
-            )
+        cat_title = QLabel(
+            "CATEGORIES"
         )
 
         cat_title.setStyleSheet(
-            "color:#aeb5bd;"
+            "color:#a9a1b5;font-size:11px;font-weight:bold;"
         )
 
-        left_layout.addWidget(cat_title)
+        left_layout.addWidget(
+            cat_title
+        )
 
-        left_layout.addSpacing(6)
+        left_layout.addSpacing(
+            6
+        )
 
         self.category_buttons = []
 
@@ -1544,7 +2650,9 @@ class GarageWindow(QMainWindow):
                 category["category_name"]
             )
 
-            button.setCheckable(True)
+            button.setCheckable(
+                True
+            )
 
             button.clicked.connect(
                 lambda checked,
@@ -1559,29 +2667,40 @@ class GarageWindow(QMainWindow):
                 )
             )
 
-            left_layout.addWidget(button)
+            left_layout.addWidget(
+                button
+            )
 
         left_layout.addStretch()
 
-        content.addWidget(left)
+        content.addWidget(
+            left
+        )
 
-        # ====================================================
-        # CENTER CAR
-        # ====================================================
+        # ----------------------------------------------------
+        # CENTER
+        # ----------------------------------------------------
 
         center = QFrame()
 
         center.setStyleSheet(
             """
             QFrame {
-                background: rgba(38, 31, 24, 220);
-                border: 1px solid #5d5144;
-                border-radius: 14px;
+                background:#0f0b16;
+                border:1px solid #30263d;
+                border-radius:15px;
+            }
+
+            QLabel {
+                background:transparent;
+                border:none;
             }
             """
         )
 
-        center_layout = QVBoxLayout(center)
+        center_layout = QVBoxLayout(
+            center
+        )
 
         center_layout.setContentsMargins(
             20,
@@ -1598,19 +2717,13 @@ class GarageWindow(QMainWindow):
             Qt.AlignmentFlag.AlignCenter
         )
 
-        garage_label.setFont(
-            QFont(
-                "Segoe UI",
-                12,
-                QFont.Weight.Bold
-            )
-        )
-
         garage_label.setStyleSheet(
-            "color:#d8c5aa;"
+            "color:#c4b5fd;font-size:12px;font-weight:bold;"
         )
 
-        center_layout.addWidget(garage_label)
+        center_layout.addWidget(
+            garage_label
+        )
 
         self.car_label = QLabel()
 
@@ -1642,37 +2755,56 @@ class GarageWindow(QMainWindow):
         )
 
         self.status_label.setStyleSheet(
-            "color:#c5ccd4; font-size:14px; padding:8px;"
+            "color:#b8afc4;font-size:14px;padding:8px;"
         )
 
-        center_layout.addWidget(self.status_label)
+        center_layout.addWidget(
+            self.status_label
+        )
 
-        content.addWidget(center, 1)
+        content.addWidget(
+            center,
+            1
+        )
 
-        # ====================================================
-        # PARTS
-        # ====================================================
+        # ----------------------------------------------------
+        # RIGHT
+        # ----------------------------------------------------
 
         right = QFrame()
 
-        right.setFixedWidth(355)
+        right.setFixedWidth(
+            365
+        )
 
         right.setStyleSheet(
             """
             QFrame {
-                background: rgba(20, 23, 28, 235);
-                border: 1px solid #444a52;
-                border-radius: 14px;
+                background:#121019;
+                border:1px solid #30263d;
+                border-radius:15px;
+            }
+
+            QLabel {
+                background:transparent;
+                border:none;
             }
 
             QListWidget {
-                background: transparent;
-                border: none;
+                background:transparent;
+                border:none;
+            }
+
+            QListWidget::item {
+                background:transparent;
+                border:none;
             }
             """
         )
 
-        right_layout = QVBoxLayout(right)
+        right_layout = QVBoxLayout(
+            right
+        )
 
         right_layout.setContentsMargins(
             14,
@@ -1681,21 +2813,23 @@ class GarageWindow(QMainWindow):
             14
         )
 
-        self.parts_title = QLabel("PARTS")
-
-        self.parts_title.setFont(
-            QFont(
-                "Segoe UI",
-                14,
-                QFont.Weight.Bold
-            )
+        self.parts_title = QLabel(
+            "PARTS"
         )
 
-        right_layout.addWidget(self.parts_title)
+        self.parts_title.setStyleSheet(
+            "font-size:14px;font-weight:bold;color:#f0f2f4;"
+        )
+
+        right_layout.addWidget(
+            self.parts_title
+        )
 
         self.parts_list = QListWidget()
 
-        self.parts_list.setSpacing(7)
+        self.parts_list.setSpacing(
+            7
+        )
 
         self.parts_list.itemClicked.connect(
             self.part_clicked
@@ -1710,19 +2844,25 @@ class GarageWindow(QMainWindow):
             "No part selected"
         )
 
-        self.selected_label.setWordWrap(True)
-
-        self.selected_label.setStyleSheet(
-            "color:#c5ccd4; padding:5px;"
+        self.selected_label.setWordWrap(
+            True
         )
 
-        right_layout.addWidget(self.selected_label)
+        self.selected_label.setStyleSheet(
+            "color:#b8afc4;padding:5px;"
+        )
+
+        right_layout.addWidget(
+            self.selected_label
+        )
 
         self.buy_button = QPushButton(
             "BUY / INSTALL"
         )
 
-        self.buy_button.setMinimumHeight(48)
+        self.buy_button.setMinimumHeight(
+            48
+        )
 
         self.buy_button.setCursor(
             Qt.CursorShape.PointingHandCursor
@@ -1735,67 +2875,46 @@ class GarageWindow(QMainWindow):
         self.buy_button.setStyleSheet(
             """
             QPushButton {
-                background: #d98b32;
-                border: 1px solid #ffb55c;
-                border-radius: 10px;
-                font-size: 15px;
-                font-weight: bold;
-                padding: 10px;
+                background:#8b5cf6;
+                color:white;
+                border:1px solid #c4b5fd;
+                border-radius:10px;
+                font-size:15px;
+                font-weight:bold;
+                padding:10px;
             }
 
             QPushButton:hover {
-                background: #ee9a3b;
+                background:#a78bfa;
             }
 
             QPushButton:disabled {
-                background: #4a4f55;
-                border-color: #555a61;
-                color: #a0a5aa;
+                background:#211c29;
+                border-color:#40354d;
+                color:#81778d;
             }
             """
         )
 
-        right_layout.addWidget(self.buy_button)
-
-        # ====================================================
-        # PURCHASE HISTORY
-        # ====================================================
-
-        history_button = QPushButton(
-            "📋 PURCHASE HISTORY"
+        right_layout.addWidget(
+            self.buy_button
         )
 
-        history_button.setMinimumHeight(42)
+        history_button = QPushButton(
+            "📋  PURCHASE HISTORY"
+        )
 
-        history_button.setCursor(
-            Qt.CursorShape.PointingHandCursor
+        history_button.setMinimumHeight(
+            42
         )
 
         history_button.clicked.connect(
             self.open_purchase_history
         )
 
-        history_button.setStyleSheet(
-            """
-            QPushButton {
-                background:#303840;
-                border:1px solid #65717d;
-                border-radius:9px;
-                padding:8px;
-                font-weight:bold;
-            }
-
-            QPushButton:hover {
-                background:#414c57;
-            }
-            """
+        right_layout.addWidget(
+            history_button
         )
-
-        right_layout.addWidget(history_button)
-
-        # ====================================================
-        # MANAGEMENT
-        # ====================================================
 
         if self.role_name in (
             ROLE_SHOP_MANAGER,
@@ -1803,52 +2922,50 @@ class GarageWindow(QMainWindow):
         ):
 
             management_button = QPushButton(
-                "⚙ MANAGEMENT"
+                "⚙  MANAGEMENT"
             )
 
-            management_button.setMinimumHeight(42)
+            management_button.setMinimumHeight(
+                42
+            )
 
             management_button.clicked.connect(
                 self.open_management
             )
 
-            management_button.setStyleSheet(
-                """
-                QPushButton {
-                    background:#39424b;
-                    border:1px solid #65717d;
-                    border-radius:9px;
-                    padding:8px;
-                    font-weight:bold;
-                }
-
-                QPushButton:hover {
-                    background:#4a5662;
-                }
-                """
+            right_layout.addWidget(
+                management_button
             )
 
-            right_layout.addWidget(management_button)
+        content.addWidget(
+            right
+        )
 
-        content.addWidget(right)
-
-        # ====================================================
+        # ----------------------------------------------------
         # STATS
-        # ====================================================
+        # ----------------------------------------------------
 
         stats = QFrame()
 
         stats.setStyleSheet(
             """
             QFrame {
-                background: rgba(20, 23, 28, 235);
-                border: 1px solid #444a52;
-                border-radius: 14px;
+                background:#121019;
+                border:1px solid #30263d;
+                border-radius:15px;
+            }
+
+            QLabel {
+                background:transparent;
+                border:none;
+                color:#dce1e6;
             }
             """
         )
 
-        stats_layout = QHBoxLayout(stats)
+        stats_layout = QHBoxLayout(
+            stats
+        )
 
         stats_layout.setContentsMargins(
             18,
@@ -1881,13 +2998,14 @@ class GarageWindow(QMainWindow):
                 )
             )
 
-            stats_layout.addWidget(label, 1)
+            stats_layout.addWidget(
+                label,
+                1
+            )
 
-        main.addWidget(stats)
-
-        # ====================================================
-        # WINDOW STYLE
-        # ====================================================
+        main.addWidget(
+            stats
+        )
 
         self.setStyleSheet(
             """
@@ -1898,16 +3016,36 @@ class GarageWindow(QMainWindow):
                         y1:0,
                         x2:0,
                         y2:1,
-                        stop:0 #17191d,
-                        stop:0.45 #2b241e,
-                        stop:1 #111315
+                        stop:0 #09070d,
+                        stop:0.5 #120c1b,
+                        stop:1 #07050a
                     );
             }
             """
         )
 
     # ========================================================
-    # ROLE ACCESS
+    # SWITCH USER
+    # ========================================================
+
+    def switch_user(self):
+
+        answer = QMessageBox.question(
+            self,
+            "Switch User",
+            "Return to the login screen?\n\n"
+            "Your current account will remain saved.",
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self.switch_user_callback()
+
+    # ========================================================
+    # ACCESS
     # ========================================================
 
     def can_buy(self):
@@ -1915,32 +3053,30 @@ class GarageWindow(QMainWindow):
         return self.role_name in (
             ROLE_PLAYER,
             ROLE_SHOP_MANAGER,
-            ROLE_ADMIN
+            ROLE_ADMIN,
+            "Admin"
         )
 
     def can_manage_shop(self):
 
         return self.role_name in (
             ROLE_SHOP_MANAGER,
-            ROLE_ADMIN
+            ROLE_ADMIN,
+            "Admin"
         )
 
-    def can_manage_users(self):
-
-        return self.role_name == ROLE_ADMIN
-
     # ========================================================
-    # PURCHASE HISTORY
+    # HISTORY
     # ========================================================
 
     def open_purchase_history(self):
 
-        if not self.user:
+        if not self.user.get("user_id"):
 
-            QMessageBox.warning(
+            QMessageBox.information(
                 self,
-                "No User",
-                "No user account is currently loaded."
+                "Guest Account",
+                "Guest accounts do not have purchase history."
             )
 
             return
@@ -1983,7 +3119,7 @@ class GarageWindow(QMainWindow):
         self.refresh_user_display()
 
     # ========================================================
-    # CATEGORY / PARTS
+    # CATEGORY
     # ========================================================
 
     def select_first_category(self):
@@ -2011,6 +3147,33 @@ class GarageWindow(QMainWindow):
 
         self.populate_parts()
 
+        # IMPORTANT:
+        # Do NOT change preview_parts here.
+        #
+        # This is what prevents Paint from automatically
+        # switching to Red/Blue when opening the category.
+
+        installed = self.installed_parts.get(
+            category_id
+        )
+
+        if installed:
+
+            self.status_label.setText(
+                f"Currently equipped: "
+                f"{installed['part_name']}"
+            )
+
+        else:
+
+            self.status_label.setText(
+                "No modification installed in this category."
+            )
+
+    # ========================================================
+    # PARTS
+    # ========================================================
+
     def populate_parts(self):
 
         self.parts_list.clear()
@@ -2019,9 +3182,14 @@ class GarageWindow(QMainWindow):
 
         for category in self.categories:
 
-            if category["category_id"] == self.current_category_id:
+            if (
+                category["category_id"]
+                == self.current_category_id
+            ):
 
-                category_name = category["category_name"]
+                category_name = category[
+                    "category_name"
+                ]
 
                 break
 
@@ -2033,7 +3201,9 @@ class GarageWindow(QMainWindow):
 
             item = QListWidgetItem()
 
-            button = PartButton(part)
+            button = PartButton(
+                part
+            )
 
             installed = self.installed_parts.get(
                 part["category_id"]
@@ -2041,22 +3211,26 @@ class GarageWindow(QMainWindow):
 
             if (
                 installed
-                and installed["part_id"] == part["part_id"]
+                and installed["part_id"]
+                == part["part_id"]
             ):
 
                 button.setStyleSheet(
                     """
                     QPushButton {
-                        background: #394b3b;
-                        border: 1px solid #76a879;
-                        border-radius: 9px;
-                        padding: 8px;
-                        text-align: left;
+                        background:#211a2d;
+                        color:#f3efff;
+                        border:1px solid #8b5cf6;
+                        border-radius:9px;
+                        padding:8px;
+                        text-align:left;
                     }
                     """
                 )
 
-            self.parts_list.addItem(item)
+            self.parts_list.addItem(
+                item
+            )
 
             self.parts_list.setItemWidget(
                 item,
@@ -2064,93 +3238,93 @@ class GarageWindow(QMainWindow):
             )
 
             item.setSizeHint(
-                QSize(0, 82)
+                QSize(
+                    0,
+                    82
+                )
             )
 
             button.clicked.connect(
                 lambda checked=False,
                 p=part:
-                self.select_part(p)
+                self.select_part(
+                    p,
+                    preview=False
+                )
             )
 
-        # ----------------------------------------------------
         # IMPORTANT:
-        # Do NOT automatically preview the first part.
-        #
-        # This prevents the paint category from automatically
-        # switching to Red Paint.
-        # ----------------------------------------------------
+        # Selecting a category should show the installed part,
+        # not automatically equip the first part in the list.
 
-        if self.current_category_id in self.preview_parts:
+        installed = self.installed_parts.get(
+            self.current_category_id
+        )
 
-            installed_preview = self.preview_parts[
-                self.current_category_id
-            ]
+        if installed:
 
-            for part in self.parts:
-
-                if (
-                    part["part_id"]
-                    == installed_preview["part_id"]
-                ):
-
-                    self.select_part(
-                        part,
-                        update_preview=False
-                    )
-
-                    break
+            self.select_part(
+                installed,
+                preview=False
+            )
 
         elif self.parts:
 
-            # If there is no installed part in this category,
-            # show the first part as a selection but do not
-            # permanently alter the preview.
-            self.selected_part = None
-
-            self.selected_label.setText(
-                "Select a part to preview it."
+            self.select_part(
+                self.parts[0],
+                preview=False
             )
-
-            self.buy_button.setText(
-                "SELECT A PART"
-            )
-
-            self.buy_button.setEnabled(False)
 
     def part_clicked(
         self,
         item
     ):
 
-        button = self.parts_list.itemWidget(item)
+        button = self.parts_list.itemWidget(
+            item
+        )
 
         if button:
 
-            self.select_part(button.part)
+            self.select_part(
+                button.part,
+                preview=True
+            )
 
     def select_part(
         self,
         part,
-        update_preview=True
+        preview=True
     ):
 
         self.selected_part = part
 
-        category_id = part["category_id"]
+        category_id = part[
+            "category_id"
+        ]
 
-        if update_preview:
+        # Only change the actual preview when the user
+        # deliberately selects a part.
+        if preview:
 
-            self.preview_parts[category_id] = part
+            self.preview_parts[
+                category_id
+            ] = part
 
         price = Decimal(
             str(
-                part.get("price", 0) or 0
+                part.get(
+                    "price",
+                    0
+                ) or 0
             )
         )
 
         stock = int(
-            part.get("stock", 0) or 0
+            part.get(
+                "stock",
+                0
+            ) or 0
         )
 
         installed = self.installed_parts.get(
@@ -2159,7 +3333,8 @@ class GarageWindow(QMainWindow):
 
         is_installed = (
             installed is not None
-            and installed["part_id"] == part["part_id"]
+            and installed["part_id"]
+            == part["part_id"]
         )
 
         if is_installed:
@@ -2167,18 +3342,17 @@ class GarageWindow(QMainWindow):
             self.selected_label.setText(
                 f"<b>{part['part_name']}</b><br>"
                 f"{money(price)}<br>"
-                f"Already installed on this vehicle."
+                f"<span style='color:#76a879;'>"
+                f"✓ Currently installed"
+                f"</span>"
             )
 
             self.buy_button.setText(
                 "INSTALLED"
             )
 
-            self.buy_button.setEnabled(False)
-
-            self.status_label.setText(
-                f"{part['part_name']} "
-                f"is currently installed."
+            self.buy_button.setEnabled(
+                False
             )
 
         else:
@@ -2195,12 +3369,8 @@ class GarageWindow(QMainWindow):
                     "GUEST — PURCHASE DISABLED"
                 )
 
-                self.buy_button.setEnabled(False)
-
-                self.status_label.setText(
-                    "Guest access: "
-                    "you can preview parts, "
-                    "but cannot purchase them."
+                self.buy_button.setEnabled(
+                    False
                 )
 
             else:
@@ -2215,26 +3385,25 @@ class GarageWindow(QMainWindow):
                     stock > 0
                 )
 
-                if stock <= 0:
+        if preview:
 
-                    self.status_label.setText(
-                        "This part is currently "
-                        "out of stock."
-                    )
+            self.status_label.setText(
+                f"Previewing: {part['part_name']}"
+            )
 
-                else:
+            self.refresh_car_preview()
 
-                    self.status_label.setText(
-                        f"Previewing: "
-                        f"{part['part_name']} — "
-                        f"click BUY / INSTALL "
-                        f"to save it."
-                    )
+        else:
 
-        self.refresh_car_preview()
+            if is_installed:
+
+                self.status_label.setText(
+                    f"Currently equipped: "
+                    f"{part['part_name']}"
+                )
 
     # ========================================================
-    # IMAGE / PREVIEW
+    # ASSETS
     # ========================================================
 
     def find_asset(
@@ -2249,27 +3418,13 @@ class GarageWindow(QMainWindow):
             str(filename)
         )
 
-        candidates = [
-            os.path.join(
-                ASSET_DIR,
-                filename
-            )
-        ]
+        path = os.path.join(
+            ASSET_DIR,
+            filename
+        )
 
-        if filename.endswith(".png"):
-
-            candidates.append(
-                os.path.join(
-                    ASSET_DIR,
-                    filename + ".png"
-                )
-            )
-
-        for path in candidates:
-
-            if os.path.exists(path):
-
-                return path
+        if os.path.exists(path):
+            return path
 
         return None
 
@@ -2278,12 +3433,16 @@ class GarageWindow(QMainWindow):
         filename
     ):
 
-        path = self.find_asset(filename)
+        path = self.find_asset(
+            filename
+        )
 
         if not path:
             return None
 
-        pixmap = QPixmap(path)
+        pixmap = QPixmap(
+            path
+        )
 
         if pixmap.isNull():
             return None
@@ -2292,15 +3451,20 @@ class GarageWindow(QMainWindow):
 
     def base_pixmap(self):
 
-        return (
-            self.load_pixmap("base.png")
-            or
-            self.load_pixmap("base.png.png")
+        return self.load_pixmap(
+            "base.png"
         )
+
+    # ========================================================
+    # PREVIEW
+    # ========================================================
 
     def refresh_car_preview(self):
 
-        if not hasattr(self, "car_label"):
+        if not hasattr(
+            self,
+            "car_label"
+        ):
             return
 
         base = self.base_pixmap()
@@ -2315,16 +3479,16 @@ class GarageWindow(QMainWindow):
 
             return
 
-        result = QPixmap(base.size())
+        result = QPixmap(
+            base.size()
+        )
 
         result.fill(
             Qt.GlobalColor.transparent
         )
 
-        painter = QPainter(result)
-
-        painter.setCompositionMode(
-            QPainter.CompositionMode.CompositionMode_Source
+        painter = QPainter(
+            result
         )
 
         painter.drawPixmap(
@@ -2340,25 +3504,29 @@ class GarageWindow(QMainWindow):
         parts.sort(
             key=lambda p: (
                 int(
-                    p.get("layer_order", 1) or 1
+                    p.get(
+                        "layer_order",
+                        1
+                    ) or 1
                 ),
                 int(
-                    p.get("part_id", 0) or 0
+                    p.get(
+                        "part_id",
+                        0
+                    ) or 0
                 )
             )
-        )
-
-        painter.setCompositionMode(
-            QPainter.CompositionMode.CompositionMode_SourceOver
         )
 
         for part in parts:
 
             sprite = self.load_pixmap(
-                part.get("sprite_file")
+                part.get(
+                    "sprite_file"
+                )
             )
 
-            if not sprite:
+            if sprite is None:
                 continue
 
             if sprite.size() == result.size():
@@ -2401,7 +3569,9 @@ class GarageWindow(QMainWindow):
             Qt.TransformationMode.SmoothTransformation
         )
 
-        self.car_label.setPixmap(display)
+        self.car_label.setPixmap(
+            display
+        )
 
         self.update_stats()
 
@@ -2444,15 +3614,24 @@ class GarageWindow(QMainWindow):
         for part in self.preview_parts.values():
 
             hp += int(
-                part.get("hp_bonus", 0) or 0
+                part.get(
+                    "hp_bonus",
+                    0
+                ) or 0
             )
 
             weight += int(
-                part.get("weight_change", 0) or 0
+                part.get(
+                    "weight_change",
+                    0
+                ) or 0
             )
 
             speed += int(
-                part.get("top_speed_bonus", 0) or 0
+                part.get(
+                    "top_speed_bonus",
+                    0
+                ) or 0
             )
 
             accel += Decimal(
@@ -2486,6 +3665,14 @@ class GarageWindow(QMainWindow):
 
     def refresh_user_display(self):
 
+        if not self.user.get("user_id"):
+
+            self.money_label.setText(
+                "💰 Guest"
+            )
+
+            return
+
         self.user = self.db.one(
             """
             SELECT
@@ -2499,19 +3686,21 @@ class GarageWindow(QMainWindow):
                 ON r.role_id = u.role_id
             WHERE u.user_id = %s
             """,
-            (CURRENT_USER_ID,)
+            (
+                self.user["user_id"],
+            )
         )
 
         if not self.user:
             return
 
-        self.money_label.setText(
-            f"💰 {money(self.user['money'])}"
-        )
-
         self.role_name = (
             self.user["role_name"]
             or ROLE_GUEST
+        )
+
+        self.money_label.setText(
+            f"💰 {money(self.user['money'])}"
         )
 
         self.role_label.setText(
@@ -2519,7 +3708,7 @@ class GarageWindow(QMainWindow):
         )
 
     # ========================================================
-    # BUY / INSTALL
+    # BUY
     # ========================================================
 
     def install_selected_part(self):
@@ -2545,34 +3734,6 @@ class GarageWindow(QMainWindow):
 
             return
 
-        # ----------------------------------------------------
-        # ADMIN / MANAGER MUST NOT INSTALL ON A VEHICLE
-        # BELONGING TO ANOTHER USER.
-        #
-        # They can use the preview and management screens,
-        # but purchases/installations belong to the player.
-        # ----------------------------------------------------
-
-        if (
-            self.role_name in (
-                ROLE_ADMIN,
-                ROLE_SHOP_MANAGER
-            )
-            and self.current_vehicle.get("user_id")
-            != CURRENT_USER_ID
-        ):
-
-            QMessageBox.information(
-                self,
-                "Management Account",
-                "Management accounts can preview "
-                "vehicle modifications and manage the shop, "
-                "but they cannot install parts on another "
-                "user's vehicle."
-            )
-
-            return
-
         self.install_part(
             self.selected_part
         )
@@ -2585,12 +3746,14 @@ class GarageWindow(QMainWindow):
         if not self.can_buy():
             return
 
-        if not self.current_vehicle:
+        if not self.current_vehicle.get(
+            "vehicle_id"
+        ):
 
             QMessageBox.warning(
                 self,
                 "No Vehicle",
-                "No vehicle is available."
+                "This account does not have a vehicle."
             )
 
             return
@@ -2599,7 +3762,9 @@ class GarageWindow(QMainWindow):
             "vehicle_id"
         ]
 
-        user_id = CURRENT_USER_ID
+        user_id = self.user[
+            "user_id"
+        ]
 
         part_id = int(
             part["part_id"]
@@ -2611,7 +3776,10 @@ class GarageWindow(QMainWindow):
 
         price = Decimal(
             str(
-                part.get("price", 0) or 0
+                part.get(
+                    "price",
+                    0
+                ) or 0
             )
         )
 
@@ -2621,8 +3789,6 @@ class GarageWindow(QMainWindow):
 
             self.db.ensure_connection()
 
-            self.db.conn.rollback()
-
             self.db.conn.autocommit = False
 
             self.db.conn.start_transaction()
@@ -2631,9 +3797,7 @@ class GarageWindow(QMainWindow):
                 dictionary=True
             )
 
-            # ------------------------------------------------
-            # LOCK PLAYER
-            # ------------------------------------------------
+            # LOCK USER
 
             cursor.execute(
                 """
@@ -2642,7 +3806,9 @@ class GarageWindow(QMainWindow):
                 WHERE user_id = %s
                 FOR UPDATE
                 """,
-                (user_id,)
+                (
+                    user_id,
+                )
             )
 
             user_row = cursor.fetchone()
@@ -2655,7 +3821,8 @@ class GarageWindow(QMainWindow):
 
             current_money = Decimal(
                 str(
-                    user_row["money"] or 0
+                    user_row["money"]
+                    or 0
                 )
             )
 
@@ -2663,15 +3830,11 @@ class GarageWindow(QMainWindow):
 
                 raise RuntimeError(
                     "Not enough money.\n\n"
-                    f"Your money: "
-                    f"{money(current_money)}\n"
-                    f"Part price: "
-                    f"{money(price)}"
+                    f"Your money: {money(current_money)}\n"
+                    f"Part price: {money(price)}"
                 )
 
-            # ------------------------------------------------
             # LOCK STOCK
-            # ------------------------------------------------
 
             cursor.execute(
                 """
@@ -2680,7 +3843,9 @@ class GarageWindow(QMainWindow):
                 WHERE part_id = %s
                 FOR UPDATE
                 """,
-                (part_id,)
+                (
+                    part_id,
+                )
             )
 
             stock_row = cursor.fetchone()
@@ -2702,31 +3867,7 @@ class GarageWindow(QMainWindow):
                     "This part is currently out of stock."
                 )
 
-            # ------------------------------------------------
-            # PLAYER INVENTORY
-            # ------------------------------------------------
-
-            cursor.execute(
-                """
-                SELECT
-                    inventory_id,
-                    quantity
-                FROM player_inventory
-                WHERE user_id = %s
-                  AND part_id = %s
-                FOR UPDATE
-                """,
-                (
-                    user_id,
-                    part_id
-                )
-            )
-
-            inv_row = cursor.fetchone()
-
-            # ------------------------------------------------
             # CURRENT VEHICLE PART
-            # ------------------------------------------------
 
             cursor.execute(
                 """
@@ -2751,28 +3892,31 @@ class GarageWindow(QMainWindow):
                 ) == part_id
             ):
 
-                self.db.conn.rollback()
-
-                self.db.conn.autocommit = True
-
-                self.load_installed_parts()
-
-                self.refresh_user_display()
-
-                self.refresh_car_preview()
-
-                QMessageBox.information(
-                    self,
-                    "Already Installed",
-                    f"{part['part_name']} "
-                    f"is already installed."
+                raise RuntimeError(
+                    "This part is already installed."
                 )
 
-                return
+            # PLAYER INVENTORY
 
-            # ------------------------------------------------
-            # DEDUCT MONEY
-            # ------------------------------------------------
+            cursor.execute(
+                """
+                SELECT
+                    inventory_id,
+                    quantity
+                FROM player_inventory
+                WHERE user_id = %s
+                  AND part_id = %s
+                FOR UPDATE
+                """,
+                (
+                    user_id,
+                    part_id
+                )
+            )
+
+            inv_row = cursor.fetchone()
+
+            # MONEY
 
             cursor.execute(
                 """
@@ -2786,9 +3930,7 @@ class GarageWindow(QMainWindow):
                 )
             )
 
-            # ------------------------------------------------
-            # REDUCE SHOP STOCK
-            # ------------------------------------------------
+            # STOCK
 
             cursor.execute(
                 """
@@ -2796,12 +3938,12 @@ class GarageWindow(QMainWindow):
                 SET stock = stock - 1
                 WHERE part_id = %s
                 """,
-                (part_id,)
+                (
+                    part_id,
+                )
             )
 
-            # ------------------------------------------------
-            # PLAYER INVENTORY
-            # ------------------------------------------------
+            # INVENTORY
 
             if inv_row:
 
@@ -2812,7 +3954,9 @@ class GarageWindow(QMainWindow):
                     WHERE inventory_id = %s
                     """,
                     (
-                        inv_row["inventory_id"],
+                        inv_row[
+                            "inventory_id"
+                        ],
                     )
                 )
 
@@ -2839,9 +3983,7 @@ class GarageWindow(QMainWindow):
                     )
                 )
 
-            # ------------------------------------------------
-            # PURCHASE RECORD
-            # ------------------------------------------------
+            # PURCHASE
 
             cursor.execute(
                 """
@@ -2867,9 +4009,7 @@ class GarageWindow(QMainWindow):
                 )
             )
 
-            # ------------------------------------------------
-            # INSTALL / REPLACE PART
-            # ------------------------------------------------
+            # INSTALL
 
             if installed_row:
 
@@ -2911,17 +4051,9 @@ class GarageWindow(QMainWindow):
                     )
                 )
 
-            # ------------------------------------------------
-            # COMMIT
-            # ------------------------------------------------
-
             self.db.conn.commit()
 
             self.db.conn.autocommit = True
-
-            # ------------------------------------------------
-            # REFRESH
-            # ------------------------------------------------
 
             self.load_installed_parts()
 
@@ -2930,6 +4062,10 @@ class GarageWindow(QMainWindow):
             self.load_parts()
 
             self.populate_parts()
+
+            self.preview_parts = dict(
+                self.installed_parts
+            )
 
             self.refresh_car_preview()
 
@@ -2958,11 +4094,6 @@ class GarageWindow(QMainWindow):
             except Exception:
                 pass
 
-            print(
-                "Purchase error:",
-                repr(exc)
-            )
-
             QMessageBox.critical(
                 self,
                 "Purchase Error",
@@ -2988,23 +4119,112 @@ class GarageWindow(QMainWindow):
         event
     ):
 
-        super().resizeEvent(event)
+        super().resizeEvent(
+            event
+        )
 
-        if hasattr(self, "car_label"):
+        if hasattr(
+            self,
+            "car_label"
+        ):
 
             self.refresh_car_preview()
 
-    def closeEvent(
+
+# ============================================================
+# APPLICATION CONTROLLER
+# ============================================================
+
+class ApplicationController:
+
+    def __init__(self):
+
+        self.db = Database()
+
+        self.app = QApplication.instance()
+
+        self.login_window = None
+        self.garage_window = None
+
+        self.show_login()
+
+    def show_login(self):
+
+        # Close old garage window safely.
+        if self.garage_window is not None:
+
+            try:
+                self.garage_window.close()
+            except Exception:
+                pass
+
+            self.garage_window.deleteLater()
+
+            self.garage_window = None
+
+        self.login_window = LoginWindow(
+            self.db,
+            self.login_success
+        )
+
+        self.login_window.show()
+
+    def login_success(
         self,
-        event
+        user
     ):
 
-        try:
-            self.db.close()
-        except Exception:
-            pass
+        if self.login_window is not None:
 
-        event.accept()
+            self.login_window.close()
+
+            self.login_window.deleteLater()
+
+            self.login_window = None
+
+        try:
+
+            self.garage_window = GarageWindow(
+                self.db,
+                user,
+                self.show_login
+            )
+
+            self.garage_window.show()
+
+        except Exception as exc:
+
+            QMessageBox.critical(
+                None,
+                "Application Error",
+                f"The application could not start.\n\n"
+                f"{exc}"
+            )
+
+            print(
+                "Application error:",
+                repr(exc)
+            )
+
+            self.show_login()
+
+    def close(self):
+
+        if self.garage_window is not None:
+
+            try:
+                self.garage_window.close()
+            except Exception:
+                pass
+
+        if self.login_window is not None:
+
+            try:
+                self.login_window.close()
+            except Exception:
+                pass
+
+        self.db.close()
 
 
 # ============================================================
@@ -3013,7 +4233,9 @@ class GarageWindow(QMainWindow):
 
 def main():
 
-    app = QApplication(sys.argv)
+    app = QApplication(
+        sys.argv
+    )
 
     app.setApplicationName(
         "Car Customizer"
@@ -3026,20 +4248,20 @@ def main():
         )
     )
 
+    controller = None
+
     try:
 
-        window = GarageWindow()
+        controller = ApplicationController()
 
-        print(
-            f"Logged in as "
-            f"{window.user['username']} "
-            f"(user_id={window.user['user_id']})"
-        )
+        exit_code = app.exec()
 
-        window.show()
+        if controller:
+
+            controller.close()
 
         sys.exit(
-            app.exec()
+            exit_code
         )
 
     except Error as exc:
@@ -3074,4 +4296,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
