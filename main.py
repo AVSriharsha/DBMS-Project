@@ -40,7 +40,7 @@ DB_HOST = "127.0.0.1"
 DB_PORT = 3306
 DB_NAME = "car_customizer"
 DB_USER = "root"
-DB_PASSWORD = "" #Insert password here
+DB_PASSWORD = "P14Y3R"
 
 
 # ============================================================
@@ -1764,9 +1764,18 @@ class ManagementDialog(QDialog):
 
         self.parts_table = QTableWidget()
 
+        self.parts_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.parts_table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+
         layout.addWidget(
             self.parts_table
         )
+
+        buttons = QHBoxLayout()
 
         refresh = QPushButton(
             "REFRESH PARTS"
@@ -1776,8 +1785,40 @@ class ManagementDialog(QDialog):
             self.load_parts_table
         )
 
-        layout.addWidget(
+        buttons.addWidget(
             refresh
+        )
+
+        # Parts are view-only for Shop Managers.
+        # Administrators can edit catalog information.
+        if self.role_name == ROLE_ADMIN:
+
+            edit = QPushButton(
+                "EDIT SELECTED PART"
+            )
+
+            edit.clicked.connect(
+                self.edit_selected_part
+            )
+
+            buttons.addWidget(
+                edit
+            )
+
+            delete = QPushButton(
+                "DELETE SELECTED PART"
+            )
+
+            delete.clicked.connect(
+                self.delete_selected_part
+            )
+
+            buttons.addWidget(
+                delete
+            )
+
+        layout.addLayout(
+            buttons
         )
 
         self.tabs.addTab(
@@ -1799,7 +1840,8 @@ class ManagementDialog(QDialog):
                 p.price,
                 p.hp_bonus,
                 p.weight_change,
-                p.top_speed_bonus
+                p.top_speed_bonus,
+                p.acceleration_bonus
             FROM parts p
             JOIN categories c
                 ON c.category_id = p.category_id
@@ -1808,7 +1850,7 @@ class ManagementDialog(QDialog):
         )
 
         self.parts_table.setColumnCount(
-            8
+            9
         )
 
         self.parts_table.setRowCount(
@@ -1824,7 +1866,8 @@ class ManagementDialog(QDialog):
                 "Price",
                 "HP",
                 "Weight",
-                "Speed"
+                "Speed",
+                "Acceleration"
             ]
         )
 
@@ -1838,7 +1881,8 @@ class ManagementDialog(QDialog):
                 money(row["price"]),
                 row["hp_bonus"],
                 row["weight_change"],
-                row["top_speed_bonus"]
+                row["top_speed_bonus"],
+                row["acceleration_bonus"]
             ]
 
             for c, value in enumerate(values):
@@ -1852,6 +1896,414 @@ class ManagementDialog(QDialog):
                 )
 
         self.parts_table.resizeColumnsToContents()
+
+    def edit_selected_part(self):
+
+        if self.role_name != ROLE_ADMIN:
+            return
+
+        row = self.parts_table.currentRow()
+
+        if row < 0:
+
+            QMessageBox.warning(
+                self,
+                "No Selection",
+                "Select a part first."
+            )
+
+            return
+
+        part_id = int(
+            self.parts_table.item(
+                row,
+                0
+            ).text()
+        )
+
+        part = self.db.one(
+            """
+            SELECT
+                part_id,
+                part_name,
+                manufacturer,
+                price,
+                hp_bonus,
+                weight_change,
+                top_speed_bonus,
+                acceleration_bonus
+            FROM parts
+            WHERE part_id = %s
+            """,
+            (
+                part_id,
+            )
+        )
+
+        if not part:
+
+            QMessageBox.warning(
+                self,
+                "Part Not Found",
+                "The selected part no longer exists."
+            )
+
+            self.load_parts_table()
+            return
+
+        dialog = QDialog(
+            self
+        )
+
+        dialog.setWindowTitle(
+            "Edit Part"
+        )
+
+        dialog.resize(
+            430,
+            420
+        )
+
+        form = QVBoxLayout(
+            dialog
+        )
+
+        title = QLabel(
+            f"EDIT PART #{part_id}"
+        )
+
+        title.setFont(
+            QFont(
+                "Segoe UI",
+                16,
+                QFont.Weight.Bold
+            )
+        )
+
+        title.setStyleSheet(
+            "color:#c4b5fd;"
+        )
+
+        form.addWidget(
+            title
+        )
+
+        name_edit = QLineEdit(
+            str(part["part_name"] or "")
+        )
+        manufacturer_edit = QLineEdit(
+            str(part["manufacturer"] or "")
+        )
+
+        form.addWidget(
+            QLabel("Part Name")
+        )
+        form.addWidget(
+            name_edit
+        )
+
+        form.addWidget(
+            QLabel("Manufacturer")
+        )
+        form.addWidget(
+            manufacturer_edit
+        )
+
+        hp_box = QLineEdit(
+            str(part["hp_bonus"] or 0)
+        )
+        weight_box = QLineEdit(
+            str(part["weight_change"] or 0)
+        )
+        speed_box = QLineEdit(
+            str(part["top_speed_bonus"] or 0)
+        )
+        accel_box = QLineEdit(
+            str(part["acceleration_bonus"] or 0)
+        )
+
+        for label, widget in (
+            ("HP Bonus", hp_box),
+            ("Weight Change", weight_box),
+            ("Top Speed Bonus", speed_box),
+            ("Acceleration Bonus", accel_box)
+        ):
+
+            form.addWidget(
+                QLabel(label)
+            )
+            form.addWidget(
+                widget
+            )
+
+        note = QLabel(
+            "Price is managed under Shop Inventory.\n"
+            "Category and rendering asset fields are protected."
+        )
+
+        note.setStyleSheet(
+            "color:#9ca3af;"
+        )
+
+        form.addWidget(
+            note
+        )
+
+        buttons = QHBoxLayout()
+
+        save = QPushButton(
+            "SAVE CHANGES"
+        )
+
+        cancel = QPushButton(
+            "CANCEL"
+        )
+
+        buttons.addWidget(
+            save
+        )
+        buttons.addWidget(
+            cancel
+        )
+
+        form.addLayout(
+            buttons
+        )
+
+        cancel.clicked.connect(
+            dialog.reject
+        )
+
+        def save_changes():
+
+            name = name_edit.text().strip()
+            manufacturer = manufacturer_edit.text().strip()
+
+            if not name:
+
+                QMessageBox.warning(
+                    dialog,
+                    "Invalid Part",
+                    "Part name cannot be empty."
+                )
+
+                return
+
+            try:
+
+                hp = int(hp_box.text().strip())
+                weight = int(weight_box.text().strip())
+                speed = int(speed_box.text().strip())
+                accel = Decimal(
+                    accel_box.text().strip()
+                )
+
+            except Exception:
+
+                QMessageBox.warning(
+                    dialog,
+                    "Invalid Values",
+                    "Performance values must be valid numbers."
+                )
+
+                return
+
+            if hp < 0 or speed < 0:
+
+                QMessageBox.warning(
+                    dialog,
+                    "Invalid Values",
+                    "HP and Top Speed bonuses cannot be negative."
+                )
+
+                return
+
+            try:
+
+                self.db.execute(
+                    """
+                    UPDATE parts
+                    SET
+                        part_name = %s,
+                        manufacturer = %s,
+                        hp_bonus = %s,
+                        weight_change = %s,
+                        top_speed_bonus = %s,
+                        acceleration_bonus = %s
+                    WHERE part_id = %s
+                    """,
+                    (
+                        name,
+                        manufacturer,
+                        hp,
+                        weight,
+                        speed,
+                        accel,
+                        part_id
+                    )
+                )
+
+                dialog.accept()
+
+            except Exception as exc:
+
+                QMessageBox.critical(
+                    dialog,
+                    "Update Error",
+                    str(exc)
+                )
+
+        save.clicked.connect(
+            save_changes
+        )
+
+        if dialog.exec():
+
+            self.load_parts_table()
+
+    def delete_selected_part(self):
+
+        if self.role_name != ROLE_ADMIN:
+            return
+
+        row = self.parts_table.currentRow()
+
+        if row < 0:
+
+            QMessageBox.warning(
+                self,
+                "No Selection",
+                "Select a part first."
+            )
+
+            return
+
+        part_id = int(
+            self.parts_table.item(
+                row,
+                0
+            ).text()
+        )
+
+        part_name = self.parts_table.item(
+            row,
+            2
+        ).text()
+
+        references = []
+
+        checks = (
+            (
+                "vehicle_parts",
+                """
+                SELECT COUNT(*) AS count
+                FROM vehicle_parts
+                WHERE part_id = %s
+                """
+            ),
+            (
+                "player_inventory",
+                """
+                SELECT COUNT(*) AS count
+                FROM player_inventory
+                WHERE part_id = %s
+                """
+            ),
+            (
+                "purchases",
+                """
+                SELECT COUNT(*) AS count
+                FROM purchases
+                WHERE part_id = %s
+                """
+            ),
+            (
+                "shop_inventory",
+                """
+                SELECT COUNT(*) AS count
+                FROM shop_inventory
+                WHERE part_id = %s
+                """
+            )
+        )
+
+        try:
+
+            for table_name, sql in checks:
+
+                result = self.db.one(
+                    sql,
+                    (
+                        part_id,
+                    )
+                )
+
+                if result and int(result["count"]) > 0:
+
+                    references.append(
+                        table_name
+                    )
+
+        except Exception as exc:
+
+            QMessageBox.critical(
+                self,
+                "Delete Check Error",
+                str(exc)
+            )
+
+            return
+
+        if references:
+
+            QMessageBox.warning(
+                self,
+                "Cannot Delete Part",
+                f"'{part_name}' is currently referenced by:\n\n"
+                + "\n".join(
+                    f"• {name}"
+                    for name in references
+                )
+                + "\n\n"
+                "The part is protected because deleting it "
+                "would break existing database records."
+            )
+
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Delete Part",
+            f"Delete '{part_name}'?\n\n"
+            "This action cannot be undone.",
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+
+            self.db.execute(
+                """
+                DELETE FROM parts
+                WHERE part_id = %s
+                """,
+                (
+                    part_id,
+                )
+            )
+
+            self.load_parts_table()
+
+        except Exception as exc:
+
+            QMessageBox.critical(
+                self,
+                "Delete Error",
+                str(exc)
+            )
 
     def build_users_tab(self):
 
@@ -2900,21 +3352,23 @@ class GarageWindow(QMainWindow):
             self.buy_button
         )
 
-        history_button = QPushButton(
-            "📋  PURCHASE HISTORY"
-        )
+        if self.role_name != ROLE_GUEST:
 
-        history_button.setMinimumHeight(
-            42
-        )
+            history_button = QPushButton(
+                "📋  PURCHASE HISTORY"
+            )
 
-        history_button.clicked.connect(
-            self.open_purchase_history
-        )
+            history_button.setMinimumHeight(
+                42
+            )
 
-        right_layout.addWidget(
-            history_button
-        )
+            history_button.clicked.connect(
+                self.open_purchase_history
+            )
+
+            right_layout.addWidget(
+                history_button
+            )
 
         if self.role_name in (
             ROLE_SHOP_MANAGER,
@@ -3182,39 +3636,27 @@ class GarageWindow(QMainWindow):
 
         for category in self.categories:
 
-            if (
-                category["category_id"]
-                == self.current_category_id
-            ):
-
-                category_name = category[
-                    "category_name"
-                ]
-
+            if int(category["category_id"]) == int(self.current_category_id):
+                category_name = category["category_name"]
                 break
 
-        self.parts_title.setText(
-            category_name.upper()
-        )
+        self.parts_title.setText(category_name.upper())
 
-        for part in self.parts:
+        # Always rebuild the complete list for the current category.
+        # Previewing a part must never remove another choice.
+        category_parts = [
+            part for part in self.parts
+            if int(part["category_id"]) == int(self.current_category_id)
+        ]
+
+        for part in category_parts:
 
             item = QListWidgetItem()
+            button = PartButton(part)
 
-            button = PartButton(
-                part
-            )
+            installed = self.installed_parts.get(part["category_id"])
 
-            installed = self.installed_parts.get(
-                part["category_id"]
-            )
-
-            if (
-                installed
-                and installed["part_id"]
-                == part["part_id"]
-            ):
-
+            if installed and int(installed["part_id"]) == int(part["part_id"]):
                 button.setStyleSheet(
                     """
                     QPushButton {
@@ -3228,52 +3670,36 @@ class GarageWindow(QMainWindow):
                     """
                 )
 
-            self.parts_list.addItem(
-                item
-            )
+            self.parts_list.addItem(item)
+            self.parts_list.setItemWidget(item, button)
+            item.setSizeHint(QSize(0, 82))
 
-            self.parts_list.setItemWidget(
-                item,
-                button
-            )
-
-            item.setSizeHint(
-                QSize(
-                    0,
-                    82
-                )
-            )
-
+            # Clicking a part is always a preview. It does not alter
+            # the available choices and does not write to MySQL.
             button.clicked.connect(
-                lambda checked=False,
-                p=part:
-                self.select_part(
+                lambda checked=False, p=part: self.select_part(
                     p,
-                    preview=False
+                    preview=True
                 )
             )
 
-        # IMPORTANT:
-        # Selecting a category should show the installed part,
-        # not automatically equip the first part in the list.
-
-        installed = self.installed_parts.get(
-            self.current_category_id
-        )
+        # Do not auto-select the first part. If something is actually
+        # installed, show that as the current state without changing
+        # the preview. Otherwise leave the category unselected until
+        # the user clicks an option.
+        installed = self.installed_parts.get(self.current_category_id)
 
         if installed:
-
-            self.select_part(
-                installed,
-                preview=False
+            self.select_part(installed, preview=False)
+        else:
+            self.selected_part = None
+            self.selected_label.setText("Select a part to preview it.")
+            self.buy_button.setText(
+                "GUEST — PURCHASE DISABLED"
+                if not self.can_buy()
+                else "BUY / INSTALL"
             )
-
-        elif self.parts:
-
-            self.select_part(
-                self.parts[0],
-                preview=False
-            )
+            self.buy_button.setEnabled(False)
 
     def part_clicked(
         self,
