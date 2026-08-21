@@ -4973,16 +4973,6 @@ class GarageWindow(QMainWindow):
             f"Hello, {nickname}!"
         )
 
-        nickname = (
-            self.user.get("nickname")
-            or self.user.get("username")
-            or "Guest"
-        )
-
-        self.greeting_label.setText(
-            f"Hello, {nickname}!"
-        )
-
     # ========================================================
     # BUY
     # ========================================================
