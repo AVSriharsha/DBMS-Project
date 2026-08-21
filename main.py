@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 from decimal import Decimal
 
 import mysql.connector
@@ -30,7 +31,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QStackedWidget,
 )
-
 
 # ============================================================
 # DATABASE CONFIGURATION
@@ -81,6 +81,7 @@ class Database:
     def __init__(self):
         self.conn = None
         self.connect()
+        self.ensure_schema()
 
     def connect(self):
 
@@ -94,6 +95,53 @@ class Database:
         )
 
         print("Connected to MySQL")
+
+    def ensure_schema(self):
+
+        """Ensure soft-delete support exists for the parts catalog."""
+
+        self.ensure_connection_if_needed()
+
+        cursor = self.conn.cursor(dictionary=True)
+
+        try:
+
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM information_schema.columns
+                WHERE table_schema = %s
+                  AND table_name = 'parts'
+                  AND column_name = 'is_active'
+                """,
+                (DB_NAME,)
+            )
+
+            row = cursor.fetchone()
+
+        finally:
+
+            cursor.close()
+
+        if not row or int(row["count"]) == 0:
+
+            cursor = self.conn.cursor()
+
+            try:
+                cursor.execute(
+                    """
+                    ALTER TABLE parts
+                    ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1
+                    """
+                )
+            finally:
+                cursor.close()
+
+    def ensure_connection_if_needed(self):
+
+        if self.conn is None or not self.conn.is_connected():
+
+            self.connect()
 
     def ensure_connection(self):
 
@@ -817,6 +865,34 @@ class LoginWindow(QWidget):
         )
 
         card_layout.addSpacing(
+            10
+        )
+
+        signup_button = QPushButton(
+            "CREATE ACCOUNT"
+        )
+
+        signup_button.setObjectName(
+            "signupButton"
+        )
+
+        signup_button.setMinimumHeight(
+            44
+        )
+
+        signup_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        signup_button.clicked.connect(
+            self.open_signup
+        )
+
+        card_layout.addWidget(
+            signup_button
+        )
+
+        card_layout.addSpacing(
             22
         )
 
@@ -919,17 +995,20 @@ class LoginWindow(QWidget):
 
             user = self.db.one(
                 """
-                SELECT
+                    SELECT
                     u.user_id,
                     u.username,
+                    u.nickname,
                     u.money,
                     u.role_id,
+                    u.is_active,
                     r.role_name
                 FROM users u
                 JOIN roles r
                     ON r.role_id = u.role_id
                 WHERE u.username = %s
-                  AND u.password = %s
+                    AND u.password = %s
+                    AND u.is_active = 1
                 """,
                 (
                     username,
@@ -989,6 +1068,594 @@ class LoginWindow(QWidget):
         self.login_success_callback(
             guest
         )
+
+        # ========================================================
+    # SIGN UP
+    # ========================================================
+
+    def open_signup(self):
+
+        dialog = SignupDialog(
+            self.db,
+            self
+        )
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+
+            self.username_input.clear()
+            self.password_input.clear()
+
+            QMessageBox.information(
+                self,
+                "Account Created",
+                "Your account has been created successfully.\n\n"
+                "You can now sign in with your new username and password."
+            )
+
+# ============================================================
+# SIGN UP DIALOG
+# ============================================================
+
+class SignupDialog(QDialog):
+
+    def __init__(self, db, parent=None):
+
+        super().__init__(parent)
+
+        self.db = db
+
+        self.setWindowTitle(
+            "Create Account"
+        )
+
+        self.setMinimumSize(
+            500,
+            650
+        )
+
+        self.resize(
+            500,
+            650
+        )
+
+        self.build_ui()
+
+    def build_ui(self):
+
+        self.setStyleSheet(
+            """
+            QDialog {
+                background:#09070d;
+                color:#f4f1f8;
+            }
+
+            QLabel {
+                background:transparent;
+                color:#dce1e6;
+            }
+
+            QLabel#title {
+                color:#c4b5fd;
+                font-size:24px;
+                font-weight:700;
+            }
+
+            QLabel#hint {
+                color:#8f8799;
+                font-size:11px;
+            }
+
+            QLineEdit {
+                background:#121019;
+                color:#f4f1f8;
+                border:1px solid #30263d;
+                border-radius:8px;
+                padding:10px;
+                min-height:40px;
+            }
+
+            QLineEdit:focus {
+                border:1px solid #8b5cf6;
+            }
+
+            QPushButton {
+                background:#8b5cf6;
+                color:white;
+                border:none;
+                border-radius:8px;
+                padding:10px;
+                font-weight:700;
+                min-height:42px;
+            }
+
+            QPushButton:hover {
+                background:#7c3aed;
+            }
+
+            QPushButton#cancelButton {
+                background:#211b29;
+                color:#c9c2d2;
+                border:1px solid #3a3047;
+            }
+
+            QPushButton#cancelButton:hover {
+                background:#2a2233;
+            }
+            """
+        )
+
+        layout = QVBoxLayout(
+            self
+        )
+
+        layout.setContentsMargins(
+            35,
+            30,
+            35,
+            30
+        )
+
+        layout.setSpacing(
+            10
+        )
+
+        title = QLabel(
+            "CREATE ACCOUNT"
+        )
+
+        title.setObjectName(
+            "title"
+        )
+
+        title.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        layout.addWidget(
+            title
+        )
+
+        subtitle = QLabel(
+            "Create your Player account"
+        )
+
+        subtitle.setObjectName(
+            "hint"
+        )
+
+        subtitle.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        layout.addWidget(
+            subtitle
+        )
+
+        layout.addSpacing(
+            15
+        )
+
+        # ----------------------------------------------------
+        # USERNAME
+        # ----------------------------------------------------
+
+        layout.addWidget(
+            QLabel("USERNAME")
+        )
+
+        self.username_input = QLineEdit()
+
+        self.username_input.setPlaceholderText(
+            "3–20 characters: letters, numbers, _"
+        )
+
+        self.username_input.setMaxLength(
+            20
+        )
+
+        layout.addWidget(
+            self.username_input
+        )
+
+        # ----------------------------------------------------
+        # PASSWORD
+        # ----------------------------------------------------
+
+        layout.addWidget(
+            QLabel("PASSWORD")
+        )
+
+        self.password_input = QLineEdit()
+
+        self.password_input.setPlaceholderText(
+            "Minimum 8 characters"
+        )
+
+        self.password_input.setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+
+        layout.addWidget(
+            self.password_input
+        )
+
+        # ----------------------------------------------------
+        # CONFIRM PASSWORD
+        # ----------------------------------------------------
+
+        layout.addWidget(
+            QLabel("CONFIRM PASSWORD")
+        )
+
+        self.confirm_password_input = QLineEdit()
+
+        self.confirm_password_input.setPlaceholderText(
+            "Re-enter your password"
+        )
+
+        self.confirm_password_input.setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+
+        layout.addWidget(
+            self.confirm_password_input
+        )
+
+        # ----------------------------------------------------
+        # NICKNAME
+        # ----------------------------------------------------
+
+        layout.addWidget(
+            QLabel("NICKNAME")
+        )
+
+        self.nickname_input = QLineEdit()
+
+        self.nickname_input.setPlaceholderText(
+            "What should we call you?"
+        )
+
+        self.nickname_input.setMaxLength(
+            30
+        )
+
+        layout.addWidget(
+            self.nickname_input
+        )
+
+        nickname_hint = QLabel(
+            "2–30 characters. This is used when the app greets you."
+        )
+
+        nickname_hint.setObjectName(
+            "hint"
+        )
+
+        layout.addWidget(
+            nickname_hint
+        )
+
+        # ----------------------------------------------------
+        # RULES
+        # ----------------------------------------------------
+
+        rules = QLabel(
+            "Password must contain:\n"
+            "• At least 8 characters\n"
+            "• One uppercase letter\n"
+            "• One lowercase letter\n"
+            "• One number\n"
+            "• One special character"
+        )
+
+        rules.setObjectName(
+            "hint"
+        )
+
+        layout.addSpacing(
+            5
+        )
+
+        layout.addWidget(
+            rules
+        )
+
+        layout.addStretch()
+
+        # ----------------------------------------------------
+        # BUTTONS
+        # ----------------------------------------------------
+
+        button_layout = QHBoxLayout()
+
+        cancel_button = QPushButton(
+            "CANCEL"
+        )
+
+        cancel_button.setObjectName(
+            "cancelButton"
+        )
+
+        cancel_button.clicked.connect(
+            self.reject
+        )
+
+        button_layout.addWidget(
+            cancel_button
+        )
+
+        create_button = QPushButton(
+            "CREATE ACCOUNT"
+        )
+
+        create_button.clicked.connect(
+            self.create_account
+        )
+
+        button_layout.addWidget(
+            create_button
+        )
+
+        layout.addLayout(
+            button_layout
+        )
+
+    def create_account(self):
+
+        username = self.username_input.text().strip()
+        password = self.password_input.text()
+        confirm_password = self.confirm_password_input.text()
+        nickname = self.nickname_input.text().strip()
+
+        # ----------------------------------------------------
+        # USERNAME VALIDATION
+        # ----------------------------------------------------
+
+        if not re.fullmatch(
+            r"[A-Za-z0-9_]{3,20}",
+            username
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Invalid Username",
+                "Username must be 3–20 characters long "
+                "and contain only letters, numbers, or underscores."
+            )
+
+            self.username_input.setFocus()
+
+            return
+
+        # ----------------------------------------------------
+        # PASSWORD VALIDATION
+        # ----------------------------------------------------
+
+        if len(password) < 8:
+
+            QMessageBox.warning(
+                self,
+                "Invalid Password",
+                "Password must contain at least 8 characters."
+            )
+
+            self.password_input.setFocus()
+
+            return
+
+        if not re.search(
+            r"[A-Z]",
+            password
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Invalid Password",
+                "Password must contain at least one uppercase letter."
+            )
+
+            self.password_input.setFocus()
+
+            return
+
+        if not re.search(
+            r"[a-z]",
+            password
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Invalid Password",
+                "Password must contain at least one lowercase letter."
+            )
+
+            self.password_input.setFocus()
+
+            return
+
+        if not re.search(
+            r"[0-9]",
+            password
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Invalid Password",
+                "Password must contain at least one number."
+            )
+
+            self.password_input.setFocus()
+
+            return
+
+        if not re.search(
+            r"[^A-Za-z0-9]",
+            password
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Invalid Password",
+                "Password must contain at least one special character."
+            )
+
+            self.password_input.setFocus()
+
+            return
+
+        # ----------------------------------------------------
+        # CONFIRM PASSWORD
+        # ----------------------------------------------------
+
+        if password != confirm_password:
+
+            QMessageBox.warning(
+                self,
+                "Password Mismatch",
+                "The two passwords do not match."
+            )
+
+            self.confirm_password_input.clear()
+            self.confirm_password_input.setFocus()
+
+            return
+
+        # ----------------------------------------------------
+        # NICKNAME VALIDATION
+        # ----------------------------------------------------
+
+        if not 2 <= len(nickname) <= 30:
+
+            QMessageBox.warning(
+                self,
+                "Invalid Nickname",
+                "Nickname must be between 2 and 30 characters."
+            )
+
+            self.nickname_input.setFocus()
+
+            return
+
+        if not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9 _'-]*",
+            nickname
+        ):
+
+            QMessageBox.warning(
+                self,
+                "Invalid Nickname",
+                "Nickname may contain letters, numbers, spaces, "
+                "apostrophes, hyphens, and underscores."
+            )
+
+            self.nickname_input.setFocus()
+
+            return
+
+        try:
+
+            # ------------------------------------------------
+            # CHECK USERNAME
+            # ------------------------------------------------
+
+            existing = self.db.one(
+                """
+                SELECT user_id
+                FROM users
+                WHERE username = %s
+                """,
+                (
+                    username,
+                )
+            )
+
+            if existing:
+
+                QMessageBox.warning(
+                    self,
+                    "Username Taken",
+                    "That username is already in use.\n\n"
+                    "Please choose another username."
+                )
+
+                self.username_input.setFocus()
+
+                return
+
+            # ------------------------------------------------
+            # FIND PLAYER ROLE
+            # ------------------------------------------------
+
+            player_role = self.db.one(
+                """
+                SELECT role_id
+                FROM roles
+                WHERE role_name = %s
+                LIMIT 1
+                """,
+                (
+                    ROLE_PLAYER,
+                )
+            )
+
+            if not player_role:
+
+                QMessageBox.critical(
+                    self,
+                    "Registration Error",
+                    "The Player role could not be found in the database."
+                )
+
+                return
+
+            # ------------------------------------------------
+            # CREATE ACCOUNT
+            # ------------------------------------------------
+
+            user_id = self.db.execute(
+                """
+                INSERT INTO users
+                    (
+                        username,
+                        nickname,
+                        password,
+                        money,
+                        role_id,
+                        is_active
+                    )
+                VALUES
+                    (
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        1
+                    )
+                """,
+                (
+                    username,
+                    nickname,
+                    password,
+                    Decimal("50000.00"),
+                    player_role["role_id"]
+                )
+            )
+
+            print(
+                f"Created new Player account "
+                f"{username} (user_id={user_id})"
+            )
+
+            self.accept()
+
+        except Exception as exc:
+
+            QMessageBox.critical(
+                self,
+                "Registration Error",
+                str(exc)
+            )
 
 # ============================================================
 # PART BUTTON
@@ -1581,6 +2248,7 @@ class ManagementDialog(QDialog):
             FROM shop_inventory si
             JOIN parts p
                 ON p.part_id = si.part_id
+            WHERE p.is_active = 1
             ORDER BY p.part_id
             """
         )
@@ -1805,16 +2473,28 @@ class ManagementDialog(QDialog):
                 edit
             )
 
-            delete = QPushButton(
-                "DELETE SELECTED PART"
+            deactivate = QPushButton(
+                "DEACTIVATE SELECTED"
             )
 
-            delete.clicked.connect(
-                self.delete_selected_part
+            deactivate.clicked.connect(
+                self.deactivate_selected_part
             )
 
             buttons.addWidget(
-                delete
+                deactivate
+            )
+
+            activate = QPushButton(
+                "ACTIVATE SELECTED"
+            )
+
+            activate.clicked.connect(
+                self.activate_selected_part
+            )
+
+            buttons.addWidget(
+                activate
             )
 
         layout.addLayout(
@@ -1841,7 +2521,8 @@ class ManagementDialog(QDialog):
                 p.hp_bonus,
                 p.weight_change,
                 p.top_speed_bonus,
-                p.acceleration_bonus
+                p.acceleration_bonus,
+                p.is_active
             FROM parts p
             JOIN categories c
                 ON c.category_id = p.category_id
@@ -1850,7 +2531,7 @@ class ManagementDialog(QDialog):
         )
 
         self.parts_table.setColumnCount(
-            9
+            10
         )
 
         self.parts_table.setRowCount(
@@ -1867,7 +2548,8 @@ class ManagementDialog(QDialog):
                 "HP",
                 "Weight",
                 "Speed",
-                "Acceleration"
+                "Acceleration",
+                "Status"
             ]
         )
 
@@ -1882,7 +2564,8 @@ class ManagementDialog(QDialog):
                 row["hp_bonus"],
                 row["weight_change"],
                 row["top_speed_bonus"],
-                row["acceleration_bonus"]
+                row["acceleration_bonus"],
+                "ACTIVE" if int(row["is_active"]) == 1 else "INACTIVE"
             ]
 
             for c, value in enumerate(values):
@@ -2161,7 +2844,7 @@ class ManagementDialog(QDialog):
 
             self.load_parts_table()
 
-    def delete_selected_part(self):
+    def deactivate_selected_part(self):
 
         if self.role_name != ROLE_ADMIN:
             return
@@ -2178,104 +2861,26 @@ class ManagementDialog(QDialog):
 
             return
 
-        part_id = int(
-            self.parts_table.item(
-                row,
-                0
-            ).text()
-        )
+        part_id = int(self.parts_table.item(row, 0).text())
+        part_name = self.parts_table.item(row, 2).text()
+        status = self.parts_table.item(row, 9).text()
 
-        part_name = self.parts_table.item(
-            row,
-            2
-        ).text()
+        if status == "INACTIVE":
 
-        references = []
-
-        checks = (
-            (
-                "vehicle_parts",
-                """
-                SELECT COUNT(*) AS count
-                FROM vehicle_parts
-                WHERE part_id = %s
-                """
-            ),
-            (
-                "player_inventory",
-                """
-                SELECT COUNT(*) AS count
-                FROM player_inventory
-                WHERE part_id = %s
-                """
-            ),
-            (
-                "purchases",
-                """
-                SELECT COUNT(*) AS count
-                FROM purchases
-                WHERE part_id = %s
-                """
-            ),
-            (
-                "shop_inventory",
-                """
-                SELECT COUNT(*) AS count
-                FROM shop_inventory
-                WHERE part_id = %s
-                """
-            )
-        )
-
-        try:
-
-            for table_name, sql in checks:
-
-                result = self.db.one(
-                    sql,
-                    (
-                        part_id,
-                    )
-                )
-
-                if result and int(result["count"]) > 0:
-
-                    references.append(
-                        table_name
-                    )
-
-        except Exception as exc:
-
-            QMessageBox.critical(
+            QMessageBox.information(
                 self,
-                "Delete Check Error",
-                str(exc)
+                "Already Inactive",
+                f"'{part_name}' is already inactive."
             )
-
-            return
-
-        if references:
-
-            QMessageBox.warning(
-                self,
-                "Cannot Delete Part",
-                f"'{part_name}' is currently referenced by:\n\n"
-                + "\n".join(
-                    f"• {name}"
-                    for name in references
-                )
-                + "\n\n"
-                "The part is protected because deleting it "
-                "would break existing database records."
-            )
-
             return
 
         answer = QMessageBox.question(
             self,
-            "Delete Part",
-            f"Delete '{part_name}'?\n\n"
-            "This action cannot be undone.",
+            "Deactivate Part",
+            f"Deactivate '{part_name}'?\n\n"
+            "The part will disappear from the shop and customization choices, "
+            "but purchase history, inventory, and installed vehicle records "
+            "will be preserved.",
             QMessageBox.StandardButton.Yes |
             QMessageBox.StandardButton.No
         )
@@ -2287,21 +2892,97 @@ class ManagementDialog(QDialog):
 
             self.db.execute(
                 """
-                DELETE FROM parts
+                UPDATE parts
+                SET is_active = 0
                 WHERE part_id = %s
                 """,
-                (
-                    part_id,
-                )
+                (part_id,)
             )
 
             self.load_parts_table()
+
+            QMessageBox.information(
+                self,
+                "Part Deactivated",
+                f"'{part_name}' is now inactive.\n\n"
+                "Existing purchase, inventory, and vehicle records were preserved."
+            )
 
         except Exception as exc:
 
             QMessageBox.critical(
                 self,
-                "Delete Error",
+                "Deactivate Error",
+                str(exc)
+            )
+
+    def activate_selected_part(self):
+
+        if self.role_name != ROLE_ADMIN:
+            return
+
+        row = self.parts_table.currentRow()
+
+        if row < 0:
+
+            QMessageBox.warning(
+                self,
+                "No Selection",
+                "Select a part first."
+            )
+
+            return
+
+        part_id = int(self.parts_table.item(row, 0).text())
+        part_name = self.parts_table.item(row, 2).text()
+        status = self.parts_table.item(row, 9).text()
+
+        if status == "ACTIVE":
+
+            QMessageBox.information(
+                self,
+                "Already Active",
+                f"'{part_name}' is already active."
+            )
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Activate Part",
+            f"Activate '{part_name}'?\n\n"
+            "The part will become available again in the shop and customization choices."
+            ,
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+
+            self.db.execute(
+                """
+                UPDATE parts
+                SET is_active = 1
+                WHERE part_id = %s
+                """,
+                (part_id,)
+            )
+
+            self.load_parts_table()
+
+            QMessageBox.information(
+                self,
+                "Part Activated",
+                f"'{part_name}' is active again and can be sold/selected."
+            )
+
+        except Exception as exc:
+
+            QMessageBox.critical(
+                self,
+                "Activate Error",
                 str(exc)
             )
 
@@ -2481,16 +3162,71 @@ class ManagementDialog(QDialog):
             tab
         )
 
-        table = QTableWidget()
+        title = QLabel(
+            "ROLE-BASED ACCESS CONTROL"
+        )
 
-        self.roles_table = table
+        title.setFont(
+            QFont(
+                "Segoe UI",
+                16,
+                QFont.Weight.Bold
+            )
+        )
+
+        title.setStyleSheet(
+            "color:#c4b5fd; padding:4px 0;"
+        )
 
         layout.addWidget(
-            table
+            title
+        )
+
+        description = QLabel(
+            "The four core roles define what each type of account can access in the Car Customizer system. "
+            "These system roles are protected and are not renamed or deleted from this screen."
+        )
+
+        description.setWordWrap(
+            True
+        )
+
+        description.setStyleSheet(
+            "color:#9ca3af; padding:0 0 8px 0;"
+        )
+
+        layout.addWidget(
+            description
+        )
+
+        self.roles_table = QTableWidget()
+
+        self.roles_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+
+        self.roles_table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+
+        self.roles_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+
+        self.roles_table.setAlternatingRowColors(
+            True
+        )
+
+        layout.addWidget(
+            self.roles_table
         )
 
         refresh = QPushButton(
             "REFRESH ROLES"
+        )
+
+        refresh.setMinimumHeight(
+            42
         )
 
         refresh.clicked.connect(
@@ -2518,8 +3254,36 @@ class ManagementDialog(QDialog):
             """
         )
 
+        descriptions = {
+            ROLE_GUEST:
+                "Browse and preview vehicle customization.",
+
+            ROLE_PLAYER:
+                "Purchase and install parts and view purchase history.",
+
+            ROLE_SHOP_MANAGER:
+                "Manage shop inventory and view the parts catalog.",
+
+            ROLE_ADMIN:
+                "Full system administration and management access."
+        }
+
+        permissions = {
+            ROLE_GUEST:
+                "Browse • Preview",
+
+            ROLE_PLAYER:
+                "Browse • Preview • Buy / Install • Purchase History",
+
+            ROLE_SHOP_MANAGER:
+                "Player Access • Shop Inventory • Parts View",
+
+            ROLE_ADMIN:
+                "Manager Access • Users • Parts Management • Roles"
+        }
+
         self.roles_table.setColumnCount(
-            2
+            4
         )
 
         self.roles_table.setRowCount(
@@ -2529,29 +3293,68 @@ class ManagementDialog(QDialog):
         self.roles_table.setHorizontalHeaderLabels(
             [
                 "Role ID",
-                "Role Name"
+                "Role Name",
+                "Description",
+                "Permissions"
             ]
         )
 
         for r, row in enumerate(rows):
 
-            self.roles_table.setItem(
-                r,
-                0,
-                QTableWidgetItem(
-                    str(row["role_id"])
-                )
+            role_name = str(
+                row["role_name"]
             )
 
-            self.roles_table.setItem(
-                r,
-                1,
-                QTableWidgetItem(
-                    str(row["role_name"])
+            values = [
+                row["role_id"],
+                role_name,
+                descriptions.get(
+                    role_name,
+                    "System role."
+                ),
+                permissions.get(
+                    role_name,
+                    "Defined by system."
                 )
-            )
+            ]
 
-        self.roles_table.resizeColumnsToContents()
+            for c, value in enumerate(values):
+
+                self.roles_table.setItem(
+                    r,
+                    c,
+                    QTableWidgetItem(
+                        str(value)
+                    )
+                )
+
+        self.roles_table.setColumnWidth(
+            0,
+            80
+        )
+
+        self.roles_table.setColumnWidth(
+            1,
+            170
+        )
+
+        self.roles_table.setColumnWidth(
+            2,
+            330
+        )
+
+        self.roles_table.setColumnWidth(
+            3,
+            430
+        )
+
+        self.roles_table.horizontalHeader().setStretchLastSection(
+            True
+        )
+
+        self.roles_table.verticalHeader().setDefaultSectionSize(
+            48
+        )
 
 
 # ============================================================
@@ -2666,7 +3469,6 @@ class GarageWindow(QMainWindow):
                 user_id,
             )
         )
-
         if self.current_vehicle:
 
             return
@@ -2769,6 +3571,7 @@ class GarageWindow(QMainWindow):
                 p.acceleration_bonus,
                 p.sprite_file,
                 p.layer_order,
+                p.is_active,
                 c.category_name,
                 COALESCE(si.stock, 0) AS stock
             FROM parts p
@@ -2777,6 +3580,7 @@ class GarageWindow(QMainWindow):
             LEFT JOIN shop_inventory si
                 ON si.part_id = p.part_id
             WHERE p.category_id = %s
+              AND p.is_active = 1
             ORDER BY p.price, p.part_id
             """,
             (
@@ -2936,6 +3740,34 @@ class GarageWindow(QMainWindow):
         )
 
         h.addStretch()
+
+        self.greeting_label = QLabel(
+    "Hello, Guest!"
+)
+
+        self.greeting_label.setStyleSheet(
+            "color:#c4b5fd;font-size:14px;font-weight:bold;"
+        )
+
+        h.addWidget(
+            self.greeting_label
+        )
+
+        self.role_label = QLabel(
+            f"ROLE: {self.role_name.upper()}"
+        )
+
+        self.greeting_label.setStyleSheet(
+            """
+            color:#c4b5fd;
+            font-size:14px;
+            font-weight:bold;
+            """
+        )
+
+        h.addWidget(
+            self.greeting_label
+        )
 
         self.role_label = QLabel(
             f"ROLE: {self.role_name.upper()}"
@@ -4086,7 +4918,7 @@ class GarageWindow(QMainWindow):
         )
 
     # ========================================================
-    # MONEY
+    # GREETINGS AND MONEY
     # ========================================================
 
     def refresh_user_display(self):
@@ -4104,8 +4936,10 @@ class GarageWindow(QMainWindow):
             SELECT
                 u.user_id,
                 u.username,
+                u.nickname,
                 u.money,
                 u.role_id,
+                u.is_active,
                 r.role_name
             FROM users u
             JOIN roles r
@@ -4129,8 +4963,24 @@ class GarageWindow(QMainWindow):
             f"💰 {money(self.user['money'])}"
         )
 
-        self.role_label.setText(
-            f"ROLE: {self.role_name.upper()}"
+        nickname = (
+            self.user.get("nickname")
+            or self.user.get("username")
+            or "Guest"
+        )
+
+        self.greeting_label.setText(
+            f"Hello, {nickname}!"
+        )
+
+        nickname = (
+            self.user.get("nickname")
+            or self.user.get("username")
+            or "Guest"
+        )
+
+        self.greeting_label.setText(
+            f"Hello, {nickname}!"
         )
 
     # ========================================================
