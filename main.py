@@ -40,7 +40,7 @@ DB_HOST = "127.0.0.1"
 DB_PORT = 3306
 DB_NAME = "car_customizer"
 DB_USER = "root"
-DB_PASSWORD = "" #Insert your password here
+DB_PASSWORD = "" #INSERT PASSWORD IN THE DOUBLE QUOTES
 
 
 # ============================================================
@@ -235,7 +235,7 @@ class LoginWindow(QWidget):
         )
 
         self.resize(
-            560,
+            500,
             700
         )
 
@@ -4557,12 +4557,10 @@ class GarageWindow(QMainWindow):
 
         self.selected_part = part
 
-        category_id = part[
-            "category_id"
-        ]
+        category_id = int(
+            part["category_id"]
+        )
 
-        # Only change the actual preview when the user
-        # deliberately selects a part.
         if preview:
 
             self.preview_parts[
@@ -4591,9 +4589,46 @@ class GarageWindow(QMainWindow):
 
         is_installed = (
             installed is not None
-            and installed["part_id"]
-            == part["part_id"]
+            and int(installed["part_id"])
+            == int(part["part_id"])
         )
+
+        # ----------------------------------------------------
+        # CHECK WHETHER PLAYER ALREADY OWNS THE PART
+        # ----------------------------------------------------
+
+        is_owned = False
+        owned_quantity = 0
+
+        if self.user.get("user_id"):
+
+            inventory_row = self.db.one(
+                """
+                SELECT quantity
+                FROM player_inventory
+                WHERE user_id = %s
+                  AND part_id = %s
+                  AND quantity > 0
+                """,
+                (
+                    self.user["user_id"],
+                    part["part_id"]
+                )
+            )
+
+            if inventory_row:
+
+                owned_quantity = int(
+                    inventory_row["quantity"] or 0
+                )
+
+                is_owned = (
+                    owned_quantity > 0
+                )
+
+        # ----------------------------------------------------
+        # ALREADY INSTALLED
+        # ----------------------------------------------------
 
         if is_installed:
 
@@ -4612,6 +4647,32 @@ class GarageWindow(QMainWindow):
             self.buy_button.setEnabled(
                 False
             )
+
+        # ----------------------------------------------------
+        # OWNED BUT NOT INSTALLED
+        # ----------------------------------------------------
+
+        elif is_owned:
+
+            self.selected_label.setText(
+                f"<b>{part['part_name']}</b><br>"
+                f"<span style='color:#76a879;'>"
+                f"✓ Owned × {owned_quantity}"
+                f"</span><br>"
+                f"Ready to install"
+            )
+
+            self.buy_button.setText(
+                "INSTALL"
+            )
+
+            self.buy_button.setEnabled(
+                True
+            )
+
+        # ----------------------------------------------------
+        # NOT OWNED
+        # ----------------------------------------------------
 
         else:
 
@@ -4634,9 +4695,7 @@ class GarageWindow(QMainWindow):
             else:
 
                 self.buy_button.setText(
-                    "INSTALL"
-                    if price == 0
-                    else "BUY / INSTALL"
+                    "BUY / INSTALL"
                 )
 
                 self.buy_button.setEnabled(
@@ -4658,6 +4717,12 @@ class GarageWindow(QMainWindow):
                 self.status_label.setText(
                     f"Currently equipped: "
                     f"{part['part_name']}"
+                )
+
+            elif is_owned:
+
+                self.status_label.setText(
+                    f"Owned: {part['part_name']}"
                 )
 
     # ========================================================
@@ -5063,7 +5128,189 @@ class GarageWindow(QMainWindow):
                 dictionary=True
             )
 
-            # LOCK USER
+            # =================================================
+            # CURRENT VEHICLE PART
+            # =================================================
+
+            cursor.execute(
+                """
+                SELECT part_id
+                FROM vehicle_parts
+                WHERE vehicle_id = %s
+                  AND category_id = %s
+                FOR UPDATE
+                """,
+                (
+                    vehicle_id,
+                    category_id
+                )
+            )
+
+            installed_row = cursor.fetchone()
+
+            if (
+                installed_row
+                and int(
+                    installed_row["part_id"]
+                ) == part_id
+            ):
+
+                raise RuntimeError(
+                    "This part is already installed."
+                )
+
+            # =================================================
+            # PLAYER INVENTORY
+            # =================================================
+
+            cursor.execute(
+                """
+                SELECT
+                    inventory_id,
+                    quantity
+                FROM player_inventory
+                WHERE user_id = %s
+                  AND part_id = %s
+                FOR UPDATE
+                """,
+                (
+                    user_id,
+                    part_id
+                )
+            )
+
+            inv_row = cursor.fetchone()
+
+            owned_quantity = 0
+
+            if inv_row:
+
+                owned_quantity = int(
+                    inv_row["quantity"] or 0
+                )
+
+            # =================================================
+            # CASE 1:
+            # PLAYER ALREADY OWNS THE PART
+            # =================================================
+
+            if owned_quantity > 0:
+
+                # ---------------------------------------------
+                # REMOVE ONE FROM PLAYER INVENTORY
+                # ---------------------------------------------
+
+                if owned_quantity == 1:
+
+                    cursor.execute(
+                        """
+                        DELETE FROM player_inventory
+                        WHERE inventory_id = %s
+                        """,
+                        (
+                            inv_row["inventory_id"],
+                        )
+                    )
+
+                else:
+
+                    cursor.execute(
+                        """
+                        UPDATE player_inventory
+                        SET quantity = quantity - 1
+                        WHERE inventory_id = %s
+                        """,
+                        (
+                            inv_row["inventory_id"],
+                        )
+                    )
+
+                # ---------------------------------------------
+                # INSTALL INTO VEHICLE
+                # ---------------------------------------------
+
+                if installed_row:
+
+                    cursor.execute(
+                        """
+                        UPDATE vehicle_parts
+                        SET part_id = %s
+                        WHERE vehicle_id = %s
+                          AND category_id = %s
+                        """,
+                        (
+                            part_id,
+                            vehicle_id,
+                            category_id
+                        )
+                    )
+
+                else:
+
+                    cursor.execute(
+                        """
+                        INSERT INTO vehicle_parts
+                            (
+                                vehicle_id,
+                                category_id,
+                                part_id
+                            )
+                        VALUES
+                            (
+                                %s,
+                                %s,
+                                %s
+                            )
+                        """,
+                        (
+                            vehicle_id,
+                            category_id,
+                            part_id
+                        )
+                    )
+
+                self.db.conn.commit()
+
+                self.db.conn.autocommit = True
+
+                self.load_installed_parts()
+
+                self.refresh_user_display()
+
+                self.load_parts()
+
+                self.populate_parts()
+
+                self.preview_parts = dict(
+                    self.installed_parts
+                )
+
+                self.refresh_car_preview()
+
+                self.status_label.setText(
+                    f"✓ {part['part_name']} "
+                    f"installed from inventory."
+                )
+
+                QMessageBox.information(
+                    self,
+                    "Installation Complete",
+                    f"{part['part_name']} "
+                    f"was installed successfully.\n\n"
+                    "No additional payment was required."
+                )
+
+                return
+
+            # =================================================
+            # CASE 2:
+            # PLAYER DOES NOT OWN THE PART
+            # → PURCHASE IT
+            # =================================================
+
+            # ---------------------------------------------
+            # LOCK USER MONEY
+            # ---------------------------------------------
 
             cursor.execute(
                 """
@@ -5100,7 +5347,9 @@ class GarageWindow(QMainWindow):
                     f"Part price: {money(price)}"
                 )
 
-            # LOCK STOCK
+            # ---------------------------------------------
+            # LOCK SHOP STOCK
+            # ---------------------------------------------
 
             cursor.execute(
                 """
@@ -5133,56 +5382,9 @@ class GarageWindow(QMainWindow):
                     "This part is currently out of stock."
                 )
 
-            # CURRENT VEHICLE PART
-
-            cursor.execute(
-                """
-                SELECT part_id
-                FROM vehicle_parts
-                WHERE vehicle_id = %s
-                  AND category_id = %s
-                FOR UPDATE
-                """,
-                (
-                    vehicle_id,
-                    category_id
-                )
-            )
-
-            installed_row = cursor.fetchone()
-
-            if (
-                installed_row
-                and int(
-                    installed_row["part_id"]
-                ) == part_id
-            ):
-
-                raise RuntimeError(
-                    "This part is already installed."
-                )
-
-            # PLAYER INVENTORY
-
-            cursor.execute(
-                """
-                SELECT
-                    inventory_id,
-                    quantity
-                FROM player_inventory
-                WHERE user_id = %s
-                  AND part_id = %s
-                FOR UPDATE
-                """,
-                (
-                    user_id,
-                    part_id
-                )
-            )
-
-            inv_row = cursor.fetchone()
-
-            # MONEY
+            # ---------------------------------------------
+            # DEDUCT MONEY
+            # ---------------------------------------------
 
             cursor.execute(
                 """
@@ -5196,7 +5398,9 @@ class GarageWindow(QMainWindow):
                 )
             )
 
-            # STOCK
+            # ---------------------------------------------
+            # REDUCE SHOP STOCK
+            # ---------------------------------------------
 
             cursor.execute(
                 """
@@ -5209,47 +5413,34 @@ class GarageWindow(QMainWindow):
                 )
             )
 
-            # INVENTORY
+            # ---------------------------------------------
+            # ADD TO PLAYER INVENTORY
+            # ---------------------------------------------
 
-            if inv_row:
-
-                cursor.execute(
-                    """
-                    UPDATE player_inventory
-                    SET quantity = quantity + 1
-                    WHERE inventory_id = %s
-                    """,
-                    (
-                        inv_row[
-                            "inventory_id"
-                        ],
-                    )
-                )
-
-            else:
-
-                cursor.execute(
-                    """
-                    INSERT INTO player_inventory
-                        (
-                            user_id,
-                            part_id,
-                            quantity
-                        )
-                    VALUES
-                        (
-                            %s,
-                            %s,
-                            1
-                        )
-                    """,
+            cursor.execute(
+                """
+                INSERT INTO player_inventory
                     (
                         user_id,
-                        part_id
+                        part_id,
+                        quantity
                     )
+                VALUES
+                    (
+                        %s,
+                        %s,
+                        1
+                    )
+                """,
+                (
+                    user_id,
+                    part_id
                 )
+            )
 
-            # PURCHASE
+            # ---------------------------------------------
+            # PURCHASE HISTORY
+            # ---------------------------------------------
 
             cursor.execute(
                 """
@@ -5275,7 +5466,9 @@ class GarageWindow(QMainWindow):
                 )
             )
 
-            # INSTALL
+            # ---------------------------------------------
+            # INSTALL THE NEWLY PURCHASED PART
+            # ---------------------------------------------
 
             if installed_row:
 
@@ -5362,8 +5555,8 @@ class GarageWindow(QMainWindow):
 
             QMessageBox.critical(
                 self,
-                "Purchase Error",
-                f"The purchase could not be completed.\n\n"
+                "Purchase / Installation Error",
+                f"The operation could not be completed.\n\n"
                 f"{exc}"
             )
 
