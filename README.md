@@ -56,8 +56,8 @@ Administrators and managers have additional management capabilities for maintain
 Current vehicle models include:
 
 * **Nissan Skyline GT-R R34**
-* **Honda Civic EK9**
-* **BMW M3 E46**
+* **Honda Civic EK9** (Work in Progress)
+* **BMW M3 E46** (Work in Progress)
 
 ### 🛠️ Car Customization
 
