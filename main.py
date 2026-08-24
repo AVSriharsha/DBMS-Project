@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QHBoxLayout,
+    QGridLayout,
     QVBoxLayout,
     QFrame,
     QMessageBox,
@@ -40,7 +41,7 @@ DB_HOST = "127.0.0.1"
 DB_PORT = 3306
 DB_NAME = "car_customizer"
 DB_USER = "root"
-DB_PASSWORD = "" #INSERT PASSWORD IN THE DOUBLE QUOTES
+DB_PASSWORD = "" # Enter the password in the double quotes.
 
 
 # ============================================================
@@ -247,6 +248,10 @@ class LoginWindow(QWidget):
 
         self.build_ui()
 
+        # Login is intentionally fullscreen so it matches the Garage UI.
+        # The in-window CLOSE button below provides a visible way to exit.
+        self.showFullScreen()
+
         self.username_input.setFocus()
 
     def build_ui(self):
@@ -293,15 +298,6 @@ class LoginWindow(QWidget):
                 border-radius:22px;
             }
 
-            QFrame#loginCard:hover {
-
-                border:1px solid #47365a;
-            }
-
-            /* ==============================================
-               TOP PURPLE ACCENT
-               ============================================== */
-
             QFrame#accentBar {
 
                 background:
@@ -319,15 +315,12 @@ class LoginWindow(QWidget):
                 border-radius:3px;
             }
 
-            /* ==============================================
-               BRAND
-               ============================================== */
-
             QLabel#brandIcon {
 
                 color:#a855f7;
-                font-size:42px;
+                font-size:44px;
                 font-weight:900;
+
                 background:transparent;
                 border:none;
             }
@@ -335,10 +328,12 @@ class LoginWindow(QWidget):
             QLabel#logo {
 
                 color:#ffffff;
-                font-size:28px;
+                font-size:31px;
                 font-weight:900;
+
                 background:transparent;
                 border:none;
+
                 letter-spacing:1px;
             }
 
@@ -346,15 +341,17 @@ class LoginWindow(QWidget):
 
                 color:#9f98a8;
                 font-size:13px;
+
                 background:transparent;
                 border:none;
             }
 
             QLabel#welcome {
 
-                color:#e9e3f0;
-                font-size:19px;
+                color:#eee8f4;
+                font-size:25px;
                 font-weight:700;
+
                 background:transparent;
                 border:none;
             }
@@ -362,28 +359,23 @@ class LoginWindow(QWidget):
             QLabel#loginHint {
 
                 color:#756d80;
-                font-size:12px;
+                font-size:13px;
+
                 background:transparent;
                 border:none;
             }
-
-            /* ==============================================
-               FIELD LABELS
-               ============================================== */
 
             QLabel#fieldLabel {
 
                 color:#bdb5c8;
                 font-size:11px;
                 font-weight:800;
+
                 background:transparent;
                 border:none;
+
                 letter-spacing:1px;
             }
-
-            /* ==============================================
-               INPUT FIELDS
-               ============================================== */
 
             QLineEdit {
 
@@ -393,8 +385,7 @@ class LoginWindow(QWidget):
                 border:1px solid #302a37;
                 border-radius:11px;
 
-                padding:
-                    0px 15px;
+                padding:0px 15px;
 
                 font-size:14px;
 
@@ -419,10 +410,6 @@ class LoginWindow(QWidget):
                 color:#5f5868;
             }
 
-            /* ==============================================
-               LOGIN BUTTON
-               ============================================== */
-
             QPushButton#loginButton {
 
                 background:
@@ -443,7 +430,7 @@ class LoginWindow(QWidget):
                 font-size:14px;
                 font-weight:800;
 
-                padding:12px;
+                padding:11px 20px;
             }
 
             QPushButton#loginButton:hover {
@@ -466,17 +453,6 @@ class LoginWindow(QWidget):
                 background:#5b21b6;
             }
 
-            QPushButton#loginButton:disabled {
-
-                background:#29222f;
-                border:1px solid #3b3344;
-                color:#665e70;
-            }
-
-            /* ==============================================
-               GUEST BUTTON
-               ============================================== */
-
             QPushButton#guestButton {
 
                 background:#111016;
@@ -488,7 +464,7 @@ class LoginWindow(QWidget):
                 font-size:13px;
                 font-weight:700;
 
-                padding:10px;
+                padding:10px 16px;
             }
 
             QPushButton#guestButton:hover {
@@ -499,58 +475,149 @@ class LoginWindow(QWidget):
                 border:1px solid #574366;
             }
 
-            QPushButton#guestButton:pressed {
+            QPushButton#signupButton {
 
-                background:#0d0b10;
+                background:#17121f;
+                color:#cfc5da;
+
+                border:1px solid #4b3a5d;
+                border-radius:10px;
+
+                font-size:13px;
+                font-weight:700;
+
+                padding:10px 16px;
             }
 
-            /* ==============================================
-               FOOTER
-               ============================================== */
+            QPushButton#signupButton:hover {
 
-            QLabel#footer {
+                background:#21182d;
+                color:#eee7f5;
 
-                color:#514958;
-                font-size:11px;
-
-                background:transparent;
-                border:none;
+                border:1px solid #72568d;
             }
 
-            /* ==============================================
-               DIVIDER
-               ============================================== */
+            QPushButton#closeCornerButton {
 
-            QFrame#divider {
+                background:#111016;
+                color:#aaa1b2;
 
-                background:#29232f;
+                border:1px solid #342d3d;
+                border-radius:10px;
+
+                font-size:18px;
+                font-weight:700;
+            }
+
+            QPushButton#closeCornerButton:hover {
+
+                background:#381b25;
+                color:#ffffff;
+
+                border:1px solid #a34b61;
+            }
+
+            QPushButton#closeCornerButton:pressed {
+
+                background:#24121a;
+            }
+
+            QFrame#verticalDivider {
+
+                background:#2d2635;
                 border:none;
-                max-height:1px;
+                max-width:1px;
             }
             """
         )
 
         # ====================================================
-        # OUTER LAYOUT
+        # FULLSCREEN OUTER LAYOUT
         # ====================================================
 
-        outer = QVBoxLayout(
-            self
-        )
+        outer = QVBoxLayout(self)
 
         outer.setContentsMargins(
-            35,
+            34,
             28,
-            35,
-            28
+            34,
+            34
         )
 
-        outer.setSpacing(
+        outer.setSpacing(0)
+
+        # ====================================================
+        # TOP-LEFT CLOSE BUTTON
+        # ====================================================
+
+        top_bar = QHBoxLayout()
+
+        top_bar.setContentsMargins(
+            0,
+            0,
+            0,
             0
         )
 
+        top_bar.setSpacing(0)
+
+        close_corner = QPushButton(
+            "✕"
+        )
+
+        close_corner.setObjectName(
+            "closeCornerButton"
+        )
+
+        close_corner.setFixedSize(
+            46,
+            46
+        )
+
+        close_corner.setToolTip(
+            "Close application"
+        )
+
+        close_corner.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        close_corner.clicked.connect(
+            QApplication.quit
+        )
+
+        top_bar.addWidget(
+            close_corner,
+            0,
+            Qt.AlignmentFlag.AlignLeft |
+            Qt.AlignmentFlag.AlignTop
+        )
+
+        top_bar.addStretch()
+
+        outer.addLayout(
+            top_bar
+        )
+
         # ====================================================
-        # LOGIN CARD
+        # CENTER AREA
+        # ====================================================
+
+        center = QVBoxLayout()
+
+        center.setContentsMargins(
+            0,
+            0,
+            0,
+            0
+        )
+
+        center.setSpacing(0)
+
+        center.addStretch(1)
+
+        # ====================================================
+        # WIDE LOGIN CARD
         # ====================================================
 
         card = QFrame()
@@ -559,50 +626,53 @@ class LoginWindow(QWidget):
             "loginCard"
         )
 
-        card.setMaximumWidth(
-            455
+        card.setFixedSize(
+            1050,
+            520
         )
 
-        card_layout = QVBoxLayout(
+        card_layout = QHBoxLayout(
             card
         )
 
         card_layout.setContentsMargins(
-            42,
             0,
-            42,
-            30
-        )
-
-        card_layout.setSpacing(
+            0,
+            0,
             0
         )
 
-        # ====================================================
-        # PURPLE ACCENT BAR
-        # ====================================================
-
-        accent = QFrame()
-
-        accent.setObjectName(
-            "accentBar"
-        )
-
-        accent.setFixedHeight(
-            4
-        )
-
-        card_layout.addWidget(
-            accent
-        )
-
-        card_layout.addSpacing(
-            30
-        )
+        card_layout.setSpacing(0)
 
         # ====================================================
-        # BRAND ICON
+        # LEFT BRAND / WELCOME PANEL
         # ====================================================
+
+        left_panel = QFrame()
+
+        left_panel.setStyleSheet(
+            """
+            QFrame {
+                background:transparent;
+                border:none;
+            }
+            """
+        )
+
+        left_layout = QVBoxLayout(
+            left_panel
+        )
+
+        left_layout.setContentsMargins(
+            60,
+            45,
+            45,
+            45
+        )
+
+        left_layout.setSpacing(0)
+
+        left_layout.addStretch(1)
 
         brand_icon = QLabel(
             "⌁"
@@ -613,20 +683,16 @@ class LoginWindow(QWidget):
         )
 
         brand_icon.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
+            Qt.AlignmentFlag.AlignLeft
         )
 
-        card_layout.addWidget(
+        left_layout.addWidget(
             brand_icon
         )
 
-        card_layout.addSpacing(
-            3
+        left_layout.addSpacing(
+            8
         )
-
-        # ====================================================
-        # TITLE
-        # ====================================================
 
         logo = QLabel(
             "CAR CUSTOMIZER"
@@ -637,11 +703,15 @@ class LoginWindow(QWidget):
         )
 
         logo.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
+            Qt.AlignmentFlag.AlignLeft
         )
 
-        card_layout.addWidget(
+        left_layout.addWidget(
             logo
+        )
+
+        left_layout.addSpacing(
+            5
         )
 
         subtitle = QLabel(
@@ -653,20 +723,16 @@ class LoginWindow(QWidget):
         )
 
         subtitle.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
+            Qt.AlignmentFlag.AlignLeft
         )
 
-        card_layout.addWidget(
+        left_layout.addWidget(
             subtitle
         )
 
-        card_layout.addSpacing(
-            32
+        left_layout.addSpacing(
+            42
         )
-
-        # ====================================================
-        # WELCOME
-        # ====================================================
 
         welcome = QLabel(
             "Welcome back"
@@ -677,19 +743,20 @@ class LoginWindow(QWidget):
         )
 
         welcome.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
+            Qt.AlignmentFlag.AlignLeft
         )
 
-        card_layout.addWidget(
+        left_layout.addWidget(
             welcome
         )
 
-        card_layout.addSpacing(
-            6
+        left_layout.addSpacing(
+            8
         )
 
         login_hint = QLabel(
-            "Sign in to access your garage"
+            "Sign in to access your garage,\n"
+            "manage your vehicle and start customizing."
         )
 
         login_hint.setObjectName(
@@ -697,20 +764,111 @@ class LoginWindow(QWidget):
         )
 
         login_hint.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
+            Qt.AlignmentFlag.AlignLeft
         )
 
-        card_layout.addWidget(
+        login_hint.setWordWrap(
+            True
+        )
+
+        left_layout.addWidget(
             login_hint
         )
 
-        card_layout.addSpacing(
-            27
+        left_layout.addStretch(1)
+
+        card_layout.addWidget(
+            left_panel,
+            1
         )
 
         # ====================================================
-        # USERNAME LABEL
+        # DIVIDER
         # ====================================================
+
+        divider = QFrame()
+
+        divider.setObjectName(
+            "verticalDivider"
+        )
+
+        divider.setFixedWidth(
+            1
+        )
+
+        card_layout.addWidget(
+            divider
+        )
+
+        # ====================================================
+        # RIGHT LOGIN PANEL
+        # ====================================================
+
+        right_panel = QFrame()
+
+        right_panel.setStyleSheet(
+            """
+            QFrame {
+                background:transparent;
+                border:none;
+            }
+            """
+        )
+
+        right_layout = QVBoxLayout(
+            right_panel
+        )
+
+        right_layout.setContentsMargins(
+            55,
+            50,
+            60,
+            50
+        )
+
+        right_layout.setSpacing(0)
+
+        right_layout.addStretch(1)
+
+        panel_title = QLabel(
+            "SIGN IN"
+        )
+
+        panel_title.setStyleSheet(
+            """
+            QLabel {
+                color:#eee8f4;
+                font-size:20px;
+                font-weight:800;
+                background:transparent;
+                border:none;
+            }
+            """
+        )
+
+        right_layout.addWidget(
+            panel_title
+        )
+
+        right_layout.addSpacing(
+            6
+        )
+
+        panel_hint = QLabel(
+            "Enter your account details below."
+        )
+
+        panel_hint.setObjectName(
+            "loginHint"
+        )
+
+        right_layout.addWidget(
+            panel_hint
+        )
+
+        right_layout.addSpacing(
+            25
+        )
 
         username_label = QLabel(
             "USERNAME"
@@ -720,17 +878,13 @@ class LoginWindow(QWidget):
             "fieldLabel"
         )
 
-        card_layout.addWidget(
+        right_layout.addWidget(
             username_label
         )
 
-        card_layout.addSpacing(
+        right_layout.addSpacing(
             7
         )
-
-        # ====================================================
-        # USERNAME INPUT
-        # ====================================================
 
         self.username_input = QLineEdit()
 
@@ -739,24 +893,20 @@ class LoginWindow(QWidget):
         )
 
         self.username_input.setMinimumHeight(
-            50
+            48
         )
 
         self.username_input.setClearButtonEnabled(
             True
         )
 
-        card_layout.addWidget(
+        right_layout.addWidget(
             self.username_input
         )
 
-        card_layout.addSpacing(
-            17
+        right_layout.addSpacing(
+            18
         )
-
-        # ====================================================
-        # PASSWORD LABEL
-        # ====================================================
 
         password_label = QLabel(
             "PASSWORD"
@@ -766,17 +916,13 @@ class LoginWindow(QWidget):
             "fieldLabel"
         )
 
-        card_layout.addWidget(
+        right_layout.addWidget(
             password_label
         )
 
-        card_layout.addSpacing(
+        right_layout.addSpacing(
             7
         )
-
-        # ====================================================
-        # PASSWORD INPUT
-        # ====================================================
 
         self.password_input = QLineEdit()
 
@@ -789,24 +935,20 @@ class LoginWindow(QWidget):
         )
 
         self.password_input.setMinimumHeight(
-            50
+            48
         )
 
         self.password_input.returnPressed.connect(
             self.login
         )
 
-        card_layout.addWidget(
+        right_layout.addWidget(
             self.password_input
         )
 
-        card_layout.addSpacing(
-            24
+        right_layout.addSpacing(
+            22
         )
-
-        # ====================================================
-        # LOGIN BUTTON
-        # ====================================================
 
         login_button = QPushButton(
             "SIGN IN"
@@ -817,7 +959,7 @@ class LoginWindow(QWidget):
         )
 
         login_button.setMinimumHeight(
-            50
+            46
         )
 
         login_button.setCursor(
@@ -828,17 +970,20 @@ class LoginWindow(QWidget):
             self.login
         )
 
-        card_layout.addWidget(
+        right_layout.addWidget(
             login_button
         )
 
-        card_layout.addSpacing(
-            12
+        right_layout.addSpacing(
+            10
         )
 
-        # ====================================================
-        # GUEST BUTTON
-        # ====================================================
+        # Secondary actions are placed side-by-side.
+        secondary = QHBoxLayout()
+
+        secondary.setSpacing(
+            10
+        )
 
         guest_button = QPushButton(
             "CONTINUE AS GUEST"
@@ -849,7 +994,7 @@ class LoginWindow(QWidget):
         )
 
         guest_button.setMinimumHeight(
-            44
+            42
         )
 
         guest_button.setCursor(
@@ -858,14 +1003,6 @@ class LoginWindow(QWidget):
 
         guest_button.clicked.connect(
             self.login_guest
-        )
-
-        card_layout.addWidget(
-            guest_button
-        )
-
-        card_layout.addSpacing(
-            10
         )
 
         signup_button = QPushButton(
@@ -877,7 +1014,7 @@ class LoginWindow(QWidget):
         )
 
         signup_button.setMinimumHeight(
-            44
+            42
         )
 
         signup_button.setCursor(
@@ -888,78 +1025,41 @@ class LoginWindow(QWidget):
             self.open_signup
         )
 
-        card_layout.addWidget(
-            signup_button
-        )
-
-        card_layout.addSpacing(
-            22
-        )
-
-        # ====================================================
-        # DIVIDER
-        # ====================================================
-
-        divider = QFrame()
-
-        divider.setObjectName(
-            "divider"
-        )
-
-        divider.setFrameShape(
-            QFrame.Shape.HLine
-        )
-
-        divider.setFixedHeight(
+        secondary.addWidget(
+            guest_button,
             1
         )
 
+        secondary.addWidget(
+            signup_button,
+            1
+        )
+
+        right_layout.addLayout(
+            secondary
+        )
+
+        right_layout.addStretch(1)
+
         card_layout.addWidget(
-            divider
-        )
-
-        card_layout.addSpacing(
-            15
+            right_panel,
+            1
         )
 
         # ====================================================
-        # ACCOUNT HINT
+        # CENTER THE WIDE CARD
         # ====================================================
 
-        hint = QLabel(
-            "Available accounts:  Admin  •  Manager  •  Player"
-        )
-
-        hint.setObjectName(
-            "footer"
-        )
-
-        hint.setAlignment(
+        center.addWidget(
+            card,
+            0,
             Qt.AlignmentFlag.AlignCenter
         )
 
-        hint.setWordWrap(
-            True
-        )
+        center.addStretch(1)
 
-        card_layout.addWidget(
-            hint
-        )
-
-        # ====================================================
-        # ADD CARD TO WINDOW
-        # ====================================================
-
-        outer.addStretch(
-            1
-        )
-
-        outer.addWidget(
-            card,
-            alignment=Qt.AlignmentFlag.AlignHCenter
-        )
-
-        outer.addStretch(
+        outer.addLayout(
+            center,
             1
         )
 
@@ -1109,13 +1209,13 @@ class SignupDialog(QDialog):
         )
 
         self.setMinimumSize(
-            500,
+            820,
             650
         )
 
         self.resize(
-            500,
-            650
+            900,
+            680
         )
 
         self.build_ui()
@@ -1136,36 +1236,86 @@ class SignupDialog(QDialog):
 
             QLabel#title {
                 color:#c4b5fd;
-                font-size:24px;
-                font-weight:700;
+                font-size:26px;
+                font-weight:800;
             }
 
             QLabel#hint {
                 color:#8f8799;
+                font-size:12px;
+            }
+
+            QLabel#sectionTitle {
+                color:#e8e1ef;
+                font-size:14px;
+                font-weight:800;
+            }
+
+            QLabel#fieldLabel {
+                color:#bdb5c8;
                 font-size:11px;
+                font-weight:800;
+                letter-spacing:0.5px;
+            }
+
+            QLabel#requirementsTitle {
+                color:#d9d1e3;
+                font-size:12px;
+                font-weight:800;
+                letter-spacing:0.5px;
+            }
+
+            QLabel#passwordRule {
+                color:#82798c;
+                font-size:12px;
+                background:transparent;
+                border:none;
+            }
+
+            QLabel#passwordRuleValid {
+                color:#78d6a0;
+                font-size:12px;
+                background:transparent;
+                border:none;
+                font-weight:600;
+            }
+
+            QFrame#panel {
+                background:#100d15;
+                border:1px solid #292230;
+                border-radius:14px;
+            }
+
+            QFrame#requirementsPanel {
+                background:#0d0a12;
+                border:1px solid #292230;
+                border-radius:14px;
             }
 
             QLineEdit {
                 background:#121019;
                 color:#f4f1f8;
                 border:1px solid #30263d;
-                border-radius:8px;
-                padding:10px;
-                min-height:40px;
+                border-radius:9px;
+                padding:0px 13px;
+                min-height:44px;
+                font-size:13px;
             }
 
             QLineEdit:focus {
                 border:1px solid #8b5cf6;
+                background:#15111b;
             }
 
             QPushButton {
                 background:#8b5cf6;
                 color:white;
                 border:none;
-                border-radius:8px;
-                padding:10px;
+                border-radius:9px;
+                padding:10px 18px;
                 font-weight:700;
-                min-height:42px;
+                min-height:44px;
+                font-size:13px;
             }
 
             QPushButton:hover {
@@ -1181,23 +1331,29 @@ class SignupDialog(QDialog):
             QPushButton#cancelButton:hover {
                 background:#2a2233;
             }
+
+            QFrame#separator {
+                background:#2d2635;
+                border:none;
+                max-height:1px;
+            }
             """
         )
 
-        layout = QVBoxLayout(
-            self
-        )
+        layout = QVBoxLayout(self)
 
         layout.setContentsMargins(
-            35,
+            42,
             30,
-            35,
+            42,
             30
         )
 
-        layout.setSpacing(
-            10
-        )
+        layout.setSpacing(0)
+
+        # ====================================================
+        # HEADER
+        # ====================================================
 
         title = QLabel(
             "CREATE ACCOUNT"
@@ -1213,6 +1369,10 @@ class SignupDialog(QDialog):
 
         layout.addWidget(
             title
+        )
+
+        layout.addSpacing(
+            5
         )
 
         subtitle = QLabel(
@@ -1232,15 +1392,74 @@ class SignupDialog(QDialog):
         )
 
         layout.addSpacing(
-            15
+            24
+        )
+
+        # ====================================================
+        # TWO-COLUMN CONTENT
+        # ====================================================
+
+        columns = QHBoxLayout()
+
+        columns.setSpacing(
+            20
         )
 
         # ----------------------------------------------------
-        # USERNAME
+        # LEFT: ACCOUNT DETAILS
         # ----------------------------------------------------
 
-        layout.addWidget(
-            QLabel("USERNAME")
+        account_panel = QFrame()
+
+        account_panel.setObjectName(
+            "panel"
+        )
+
+        account_layout = QVBoxLayout(
+            account_panel
+        )
+
+        account_layout.setContentsMargins(
+            24,
+            22,
+            24,
+            22
+        )
+
+        account_layout.setSpacing(
+            0
+        )
+
+        account_title = QLabel(
+            "ACCOUNT DETAILS"
+        )
+
+        account_title.setObjectName(
+            "sectionTitle"
+        )
+
+        account_layout.addWidget(
+            account_title
+        )
+
+        account_layout.addSpacing(
+            20
+        )
+
+        username_label = QLabel(
+            "USERNAME"
+        )
+
+        username_label.setObjectName(
+            "fieldLabel"
+        )
+
+        account_layout.addWidget(
+            username_label
+        )
+
+        account_layout.addSpacing(
+            7
         )
 
         self.username_input = QLineEdit()
@@ -1253,60 +1472,28 @@ class SignupDialog(QDialog):
             20
         )
 
-        layout.addWidget(
+        account_layout.addWidget(
             self.username_input
         )
 
-        # ----------------------------------------------------
-        # PASSWORD
-        # ----------------------------------------------------
-
-        layout.addWidget(
-            QLabel("PASSWORD")
+        account_layout.addSpacing(
+            22
         )
 
-        self.password_input = QLineEdit()
-
-        self.password_input.setPlaceholderText(
-            "Minimum 8 characters"
+        nickname_label = QLabel(
+            "NICKNAME"
         )
 
-        self.password_input.setEchoMode(
-            QLineEdit.EchoMode.Password
+        nickname_label.setObjectName(
+            "fieldLabel"
         )
 
-        layout.addWidget(
-            self.password_input
+        account_layout.addWidget(
+            nickname_label
         )
 
-        # ----------------------------------------------------
-        # CONFIRM PASSWORD
-        # ----------------------------------------------------
-
-        layout.addWidget(
-            QLabel("CONFIRM PASSWORD")
-        )
-
-        self.confirm_password_input = QLineEdit()
-
-        self.confirm_password_input.setPlaceholderText(
-            "Re-enter your password"
-        )
-
-        self.confirm_password_input.setEchoMode(
-            QLineEdit.EchoMode.Password
-        )
-
-        layout.addWidget(
-            self.confirm_password_input
-        )
-
-        # ----------------------------------------------------
-        # NICKNAME
-        # ----------------------------------------------------
-
-        layout.addWidget(
-            QLabel("NICKNAME")
+        account_layout.addSpacing(
+            7
         )
 
         self.nickname_input = QLineEdit()
@@ -1319,54 +1506,268 @@ class SignupDialog(QDialog):
             30
         )
 
-        layout.addWidget(
+        account_layout.addWidget(
             self.nickname_input
         )
 
+        account_layout.addSpacing(
+            7
+        )
+
         nickname_hint = QLabel(
-            "2–30 characters. This is used when the app greets you."
+            "2–30 characters. Used when the app greets you."
         )
 
         nickname_hint.setObjectName(
             "hint"
         )
 
-        layout.addWidget(
+        nickname_hint.setWordWrap(
+            True
+        )
+
+        account_layout.addWidget(
             nickname_hint
         )
 
-        # ----------------------------------------------------
-        # RULES
-        # ----------------------------------------------------
+        account_layout.addStretch()
 
-        rules = QLabel(
-            "Password must contain:\n"
-            "• At least 8 characters\n"
-            "• One uppercase letter\n"
-            "• One lowercase letter\n"
-            "• One number\n"
-            "• One special character"
+        columns.addWidget(
+            account_panel,
+            1
         )
 
-        rules.setObjectName(
-            "hint"
+        # ----------------------------------------------------
+        # RIGHT: PASSWORD
+        # ----------------------------------------------------
+
+        password_panel = QFrame()
+
+        password_panel.setObjectName(
+            "panel"
         )
+
+        password_layout = QVBoxLayout(
+            password_panel
+        )
+
+        password_layout.setContentsMargins(
+            24,
+            22,
+            24,
+            22
+        )
+
+        password_layout.setSpacing(
+            0
+        )
+
+        password_title = QLabel(
+            "SECURITY"
+        )
+
+        password_title.setObjectName(
+            "sectionTitle"
+        )
+
+        password_layout.addWidget(
+            password_title
+        )
+
+        password_layout.addSpacing(
+            20
+        )
+
+        password_label = QLabel(
+            "PASSWORD"
+        )
+
+        password_label.setObjectName(
+            "fieldLabel"
+        )
+
+        password_layout.addWidget(
+            password_label
+        )
+
+        password_layout.addSpacing(
+            7
+        )
+
+        self.password_input = QLineEdit()
+
+        self.password_input.setPlaceholderText(
+            "Enter a strong password"
+        )
+
+        self.password_input.setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+
+        password_layout.addWidget(
+            self.password_input
+        )
+
+        password_layout.addSpacing(
+            18
+        )
+
+        confirm_label = QLabel(
+            "CONFIRM PASSWORD"
+        )
+
+        confirm_label.setObjectName(
+            "fieldLabel"
+        )
+
+        password_layout.addWidget(
+            confirm_label
+        )
+
+        password_layout.addSpacing(
+            7
+        )
+
+        self.confirm_password_input = QLineEdit()
+
+        self.confirm_password_input.setPlaceholderText(
+            "Re-enter your password"
+        )
+
+        self.confirm_password_input.setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+
+        password_layout.addWidget(
+            self.confirm_password_input
+        )
+
+        password_layout.addSpacing(
+            20
+        )
+
+        requirements_title = QLabel(
+            "PASSWORD REQUIREMENTS"
+        )
+
+        requirements_title.setObjectName(
+            "requirementsTitle"
+        )
+
+        password_layout.addWidget(
+            requirements_title
+        )
+
+        password_layout.addSpacing(
+            9
+        )
+
+        requirements_panel = QFrame()
+
+        requirements_panel.setObjectName(
+            "requirementsPanel"
+        )
+
+        requirements_grid = QGridLayout(
+            requirements_panel
+        )
+
+        requirements_grid.setContentsMargins(
+            14,
+            11,
+            14,
+            11
+        )
+
+        requirements_grid.setHorizontalSpacing(
+            18
+        )
+
+        requirements_grid.setVerticalSpacing(
+            7
+        )
+
+        self.password_rule_labels = []
+
+        rule_texts = [
+            "8+ characters",
+            "1 uppercase letter (A–Z)",
+            "1 lowercase letter (a–z)",
+            "1 number (0–9)",
+            "1 special character (!@#$...)"
+        ]
+
+        for index, text in enumerate(rule_texts):
+
+            rule_label = QLabel(
+                "○  " + text
+            )
+
+            rule_label.setObjectName(
+                "passwordRule"
+            )
+
+            self.password_rule_labels.append(
+                rule_label
+            )
+
+            requirements_grid.addWidget(
+                rule_label,
+                index // 2,
+                index % 2
+            )
+
+        password_layout.addWidget(
+            requirements_panel
+        )
+
+        self.password_input.textChanged.connect(
+            self.update_password_requirements
+        )
+
+        password_layout.addStretch()
+
+        columns.addWidget(
+            password_panel,
+            1
+        )
+
+        layout.addLayout(
+            columns,
+            1
+        )
+
+        # ====================================================
+        # BUTTONS
+        # ====================================================
 
         layout.addSpacing(
-            5
+            24
+        )
+
+        separator = QFrame()
+
+        separator.setObjectName(
+            "separator"
+        )
+
+        separator.setFrameShape(
+            QFrame.Shape.HLine
         )
 
         layout.addWidget(
-            rules
+            separator
         )
 
-        layout.addStretch()
-
-        # ----------------------------------------------------
-        # BUTTONS
-        # ----------------------------------------------------
+        layout.addSpacing(
+            18
+        )
 
         button_layout = QHBoxLayout()
+
+        button_layout.setSpacing(
+            14
+        )
 
         cancel_button = QPushButton(
             "CANCEL"
@@ -1399,6 +1800,50 @@ class SignupDialog(QDialog):
         layout.addLayout(
             button_layout
         )
+    def update_password_requirements(self, password):
+
+        checks = [
+            len(password) >= 8,
+            bool(re.search(r"[A-Z]", password)),
+            bool(re.search(r"[a-z]", password)),
+            bool(re.search(r"[0-9]", password)),
+            bool(re.search(r"[^A-Za-z0-9]", password))
+        ]
+
+        for label, valid in zip(
+            self.password_rule_labels,
+            checks
+        ):
+
+            text = label.text()
+
+            if text.startswith("✓  ") or text.startswith("○  "):
+                text = text[3:]
+
+            if valid:
+
+                label.setObjectName(
+                    "passwordRuleValid"
+                )
+
+                label.setText(
+                    "✓  " + text
+                )
+
+            else:
+
+                label.setObjectName(
+                    "passwordRule"
+                )
+
+                label.setText(
+                    "○  " + text
+                )
+
+            # Re-polish the label so the stylesheet responds immediately.
+            label.style().unpolish(label)
+            label.style().polish(label)
+            label.update()
 
     def create_account(self):
 
