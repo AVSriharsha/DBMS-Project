@@ -87,20 +87,50 @@ CREATE TABLE parts (
     layer_order INT DEFAULT 1,
     FOREIGN KEY (category_id) REFERENCES categories(category_id)
 );
+
+-- Wheels
 INSERT INTO parts
 (category_id, part_name, manufacturer, price, hp_bonus, weight_change, top_speed_bonus, acceleration_bonus, sprite_file, layer_order)
 VALUES
-(1, 'Steel Wheels', 'Toyota', 500, 0, 0, 0, 0, 'steel.png', 4),
-(1, 'Alloy Wheels', 'BBS', 2500, 0, -20, 2, 0.2, 'alloy.png', 4),
-(1, 'Forged Wheels', 'RAYS', 5000, 0, -35, 4, 0.4, 'forged.png', 4),
-(2, 'Stock Spoiler', 'Toyota', 0, 0, 0, 0, 0, 'stock.png', 6),
-(2, 'GT Wing', 'APR', 4000, 5, 10, 5, 0.3, 'gtwing.png', 6),
-(3, 'Stock Bumper', 'Toyota', 0, 0, 0, 0, 0, 'stock.png', 5),
-(3, 'Bull Bar', 'ARB', 3500, 0, 50, 0, 0, 'bullbar.png', 5),
-(4, 'Red Paint', 'Custom', 1000, 0, 0, 0, 0, 'red.png', 1),
-(4, 'Blue Paint', 'Custom', 1000, 0, 0, 0, 0, 'blue.png', 1),
-(5, 'Stock Engine', 'Toyota', 0, 0, 0, 0, 0, 'engine_stock.png', 2),
-(5, 'Turbo Engine', 'Garrett', 15000, 80, 20, 15, 1.0, 'turbo.png', 2);
+(1, 'Stock Wheels', 'OEM', 500.00, 0, 0, 0, 0.00, 'stock_wheels.png', 4),
+(1, 'BBS LM', 'BBS', 4500.00, 0, -15, 2, 0.15, 'bbs_lm.png', 4),
+(1, 'RAYS TE37', 'RAYS', 6000.00, 0, -25, 3, 0.25, 'te37.png', 4),
+(1, 'Volk CE28', 'RAYS', 7000.00, 0, -30, 4, 0.30, 'ce28.png', 4),
+(1, 'HRE Performance Wheels', 'HRE', 9000.00, 0, -35, 5, 0.35, 'hre.png', 4);
+
+-- Spoilers
+INSERT INTO parts
+(category_id, part_name, manufacturer, price, hp_bonus, weight_change, top_speed_bonus, acceleration_bonus, sprite_file, layer_order)
+VALUES
+(2, 'Stock Spoiler', 'OEM', 500.00, 0, 0, 0, 0.00, 'stock_spoiler.png', 6),
+(2, 'GT Wing', 'APR', 4000.00, 5, 10, 5, 0.30, 'gt_wing.png', 6),
+(2, 'Ducktail Spoiler', 'Mugen', 3500.00, 0, -5, 2, 0.15, 'ducktail.png', 6),
+(2, 'Carbon GT Wing', 'Varis', 6500.00, 8, 5, 8, 0.45, 'carbon_gt_wing.png', 6),
+(2, 'Time Attack Wing', 'Voltex', 8500.00, 10, 15, 12, 0.60, 'time_attack_wing.png', 6);
+
+-- Bumpers
+INSERT INTO parts
+(category_id, part_name, manufacturer, price, hp_bonus, weight_change, top_speed_bonus, acceleration_bonus, sprite_file, layer_order)
+VALUES
+(3, 'Stock Bumper', 'OEM', 500.00, 0, 0, 0, 0.00, 'stock_bumper.png', 5),
+(3, 'Bull Bar', 'ARB', 3500.00, 0, 40, 0, 0.00, 'bull_bar.png', 5),
+(3, 'NISMO Front Bumper', 'NISMO', 5000.00, 5, -10, 3, 0.20, 'nismo_bumper.png', 5),
+(3, 'Rocket Bunny Bumper', 'TRA Kyoto', 6500.00, 8, 5, 5, 0.30, 'rocket_bunny_bumper.png', 5),
+(3, 'Varis Front Bumper', 'Varis', 8000.00, 10, -5, 7, 0.40, 'varis_bumper.png', 5);
+
+-- Existing Paint
+INSERT INTO parts
+(category_id, part_name, manufacturer, price, hp_bonus, weight_change, top_speed_bonus, acceleration_bonus, sprite_file, layer_order)
+VALUES
+(4, 'Red Paint', 'Custom', 1000.00, 0, 0, 0, 0.00, 'red.png', 1),
+(4, 'Blue Paint', 'Custom', 1000.00, 0, 0, 0, 0.00, 'blue.png', 1);
+
+-- Existing Engines
+INSERT INTO parts
+(category_id, part_name, manufacturer, price, hp_bonus, weight_change, top_speed_bonus, acceleration_bonus, sprite_file, layer_order)
+VALUES
+(5, 'Stock Engine', 'Toyota', 0.00, 0, 0, 0, 0.00, 'engine_stock.png', 2),
+(5, 'Turbo Engine', 'Garrett', 15000.00, 80, 20, 15, 1.00, 'turbo.png', 2);
 
 CREATE TABLE shop_inventory (
     inventory_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -108,7 +138,8 @@ CREATE TABLE shop_inventory (
     stock INT DEFAULT 0,
     FOREIGN KEY (part_id) REFERENCES parts(part_id)
 );
-INSERT INTO shop_inventory (part_id, stock) SELECT part_id, 20 FROM parts;
+INSERT INTO shop_inventory (part_id, stock)
+SELECT part_id, 20 FROM parts;
 
 CREATE TABLE player_inventory (
     inventory_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -143,9 +174,13 @@ CREATE TABLE purchases (
 INSERT INTO vehicles (user_id, model_id, nickname)
 VALUES (3, 1, 'My Skyline');
 
+-- Default installed parts for the player's Skyline.
+-- IDs are based on this fresh database's insertion order:
+-- 1 = Stock Wheels, 6 = Stock Spoiler,
+-- 11 = Stock Bumper, 16 = Red Paint, 18 = Stock Engine.
 INSERT INTO vehicle_parts (vehicle_id, category_id, part_id) VALUES
 (1, 1, 1),
-(1, 2, 4),
-(1, 3, 6),
-(1, 4, 8),
-(1, 5, 10);
+(1, 2, 6),
+(1, 3, 11),
+(1, 4, 16),
+(1, 5, 18);
