@@ -41,7 +41,7 @@ DB_HOST = "127.0.0.1"
 DB_PORT = 3306
 DB_NAME = "car_customizer"
 DB_USER = "root"
-DB_PASSWORD = "" # Enter the password in the double quotes.
+DB_PASSWORD = "P14Y3R"
 
 
 # ============================================================
@@ -2119,7 +2119,7 @@ class PartButton(QPushButton):
         )
 
         self.setMinimumHeight(
-            78
+            116
         )
 
         self.setSizePolicy(
@@ -2164,34 +2164,38 @@ class PartButton(QPushButton):
             ) or 0
         )
 
-        extras = []
-
-        if hp:
-            extras.append(
-                f"HP {hp:+d}"
+        acceleration = Decimal(
+            str(
+                part.get(
+                    "acceleration_bonus",
+                    0
+                ) or 0
             )
+        )
 
-        if speed:
-            extras.append(
-                f"Speed {speed:+d}"
-            )
+        manufacturer = str(
+            part.get(
+                "manufacturer",
+                "OEM"
+            ) or "OEM"
+        )
 
-        if weight:
-            extras.append(
-                f"Weight {weight:+d}"
-            )
-
-        if not extras:
-
-            extras.append(
-                "Standard"
-            )
-
+        # Keep the information on separate, short lines so nothing is
+        # clipped in the 365px parts panel. Every category uses the same
+        # layout, including bumpers and engines.
         self.setText(
             f"{part['part_name']}\n"
-            f"{money(price)}   •   "
-            f"{'   '.join(extras)}   •   "
+            f"{manufacturer}   •   {money(price)}\n"
+            f"HP {hp:+d}   •   Weight {weight:+d} kg\n"
+            f"Top Speed {speed:+d} km/h   •   Accel {acceleration:+.2f}\n"
             f"Stock: {stock}"
+        )
+
+        self.setFont(
+            QFont(
+                "Segoe UI",
+                10
+            )
         )
 
 
@@ -4186,15 +4190,58 @@ class GarageWindow(QMainWindow):
 
         h.addStretch()
 
+        # ----------------------------------------------------
+        # USER IDENTITY BOX
+        # One compact box contains both the greeting and role.
+        # This prevents the greeting from appearing twice.
+        # ----------------------------------------------------
+        self.user_badge = QFrame()
+
+        self.user_badge.setObjectName(
+            "userBadge"
+        )
+
+        self.user_badge.setStyleSheet(
+            """
+            QFrame#userBadge {
+                background:#1b1624;
+                border:1px solid #49385e;
+                border-radius:10px;
+            }
+
+            QLabel {
+                background:transparent;
+                border:none;
+            }
+            """
+        )
+
+        badge_layout = QVBoxLayout(
+            self.user_badge
+        )
+
+        badge_layout.setContentsMargins(
+            13,
+            7,
+            13,
+            7
+        )
+
+        badge_layout.setSpacing(1)
+
         self.greeting_label = QLabel(
-    "Hello, Guest!"
-)
+            "Hello, Guest!"
+        )
+
+        self.greeting_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
 
         self.greeting_label.setStyleSheet(
             "color:#c4b5fd;font-size:14px;font-weight:bold;"
         )
 
-        h.addWidget(
+        badge_layout.addWidget(
             self.greeting_label
         )
 
@@ -4202,35 +4249,20 @@ class GarageWindow(QMainWindow):
             f"ROLE: {self.role_name.upper()}"
         )
 
-        self.greeting_label.setStyleSheet(
-            """
-            color:#c4b5fd;
-            font-size:14px;
-            font-weight:bold;
-            """
-        )
-
-        h.addWidget(
-            self.greeting_label
-        )
-
-        self.role_label = QLabel(
-            f"ROLE: {self.role_name.upper()}"
+        self.role_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
         )
 
         self.role_label.setStyleSheet(
-            """
-            color:#c4b5fd;
-            background:#1b1624;
-            border:1px solid #49385e;
-            border-radius:8px;
-            padding:7px 10px;
-            font-weight:bold;
-            """
+            "color:#a99ac4;font-size:10px;font-weight:bold;"
+        )
+
+        badge_layout.addWidget(
+            self.role_label
         )
 
         h.addWidget(
-            self.role_label
+            self.user_badge
         )
 
         self.money_label = QLabel()
@@ -4577,8 +4609,12 @@ class GarageWindow(QMainWindow):
             True
         )
 
+        self.selected_label.setMinimumHeight(
+            92
+        )
+
         self.selected_label.setStyleSheet(
-            "color:#b8afc4;padding:5px;"
+            "color:#b8afc4;padding:8px;line-height:1.2;"
         )
 
         right_layout.addWidget(
@@ -4949,7 +4985,7 @@ class GarageWindow(QMainWindow):
 
             self.parts_list.addItem(item)
             self.parts_list.setItemWidget(item, button)
-            item.setSizeHint(QSize(0, 82))
+            item.setSizeHint(QSize(0, 120))
 
             # Clicking a part is always a preview. It does not alter
             # the available choices and does not write to MySQL.
@@ -5071,6 +5107,34 @@ class GarageWindow(QMainWindow):
                     owned_quantity > 0
                 )
 
+        acceleration = Decimal(
+            str(
+                part.get(
+                    "acceleration_bonus",
+                    0
+                ) or 0
+            )
+        )
+
+        manufacturer = str(
+            part.get(
+                "manufacturer",
+                "OEM"
+            ) or "OEM"
+        )
+
+        specs_html = (
+            f"<b>{part['part_name']}</b><br>"
+            f"<span style='color:#9f8fbd;'>"
+            f"{manufacturer}</span> &nbsp; • &nbsp; "
+            f"<span style='color:#c4b5fd;font-weight:bold;'>"
+            f"{money(price)}</span><br>"
+            f"HP: {int(part.get('hp_bonus', 0) or 0):+d} &nbsp; • &nbsp; "
+            f"Weight: {int(part.get('weight_change', 0) or 0):+d} kg<br>"
+            f"Top Speed: {int(part.get('top_speed_bonus', 0) or 0):+d} km/h &nbsp; • &nbsp; "
+            f"Acceleration: {acceleration:+.2f}"
+        )
+
         # ----------------------------------------------------
         # ALREADY INSTALLED
         # ----------------------------------------------------
@@ -5078,8 +5142,7 @@ class GarageWindow(QMainWindow):
         if is_installed:
 
             self.selected_label.setText(
-                f"<b>{part['part_name']}</b><br>"
-                f"{money(price)}<br>"
+                specs_html + "<br>"
                 f"<span style='color:#76a879;'>"
                 f"✓ Currently installed"
                 f"</span>"
@@ -5100,7 +5163,7 @@ class GarageWindow(QMainWindow):
         elif is_owned:
 
             self.selected_label.setText(
-                f"<b>{part['part_name']}</b><br>"
+                specs_html + "<br>"
                 f"<span style='color:#76a879;'>"
                 f"✓ Owned × {owned_quantity}"
                 f"</span><br>"
@@ -5122,8 +5185,7 @@ class GarageWindow(QMainWindow):
         else:
 
             self.selected_label.setText(
-                f"<b>{part['part_name']}</b><br>"
-                f"Price: {money(price)}<br>"
+                specs_html + "<br>"
                 f"Shop stock: {stock}"
             )
 
@@ -5439,6 +5501,14 @@ class GarageWindow(QMainWindow):
                 "💰 Guest"
             )
 
+            self.greeting_label.setText(
+                "Hello, Guest!"
+            )
+
+            self.role_label.setText(
+                "ROLE: GUEST"
+            )
+
             return
 
         self.user = self.db.one(
@@ -5481,6 +5551,10 @@ class GarageWindow(QMainWindow):
 
         self.greeting_label.setText(
             f"Hello, {nickname}!"
+        )
+
+        self.role_label.setText(
+            f"ROLE: {self.role_name.upper()}"
         )
 
     # ========================================================
