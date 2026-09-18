@@ -2118,84 +2118,49 @@ class PartButton(QPushButton):
             Qt.CursorShape.PointingHandCursor
         )
 
-        self.setMinimumHeight(
-            116
-        )
+        self.setMinimumHeight(104)
 
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Fixed
         )
 
-        price = Decimal(
-            str(
-                part.get(
-                    "price",
-                    0
-                ) or 0
-            )
-        )
+        price = Decimal(str(part.get("price", 0) or 0))
+        hp = int(part.get("hp_bonus", 0) or 0)
+        weight = int(part.get("weight_change", 0) or 0)
+        speed = int(part.get("top_speed_bonus", 0) or 0)
+        accel = Decimal(str(part.get("acceleration_bonus", 0) or 0))
+        stock = int(part.get("stock", 0) or 0)
+        manufacturer = str(part.get("manufacturer") or "OEM")
 
-        hp = int(
-            part.get(
-                "hp_bonus",
-                0
-            ) or 0
-        )
+        is_stock = str(part.get("part_name", "")).lower().startswith("stock ")
 
-        weight = int(
-            part.get(
-                "weight_change",
-                0
-            ) or 0
-        )
+        price_text = "FREE" if is_stock or price == 0 else money(price)
 
-        speed = int(
-            part.get(
-                "top_speed_bonus",
-                0
-            ) or 0
-        )
-
-        stock = int(
-            part.get(
-                "stock",
-                0
-            ) or 0
-        )
-
-        acceleration = Decimal(
-            str(
-                part.get(
-                    "acceleration_bonus",
-                    0
-                ) or 0
-            )
-        )
-
-        manufacturer = str(
-            part.get(
-                "manufacturer",
-                "OEM"
-            ) or "OEM"
-        )
-
-        # Keep the information on separate, short lines so nothing is
-        # clipped in the 365px parts panel. Every category uses the same
-        # layout, including bumpers and engines.
         self.setText(
             f"{part['part_name']}\n"
-            f"{manufacturer}   •   {money(price)}\n"
-            f"HP {hp:+d}   •   Weight {weight:+d} kg\n"
-            f"Top Speed {speed:+d} km/h   •   Accel {acceleration:+.2f}\n"
+            f"{manufacturer}  •  {price_text}\n"
+            f"HP {hp:+d}  •  Weight {weight:+d} kg  •  "
+            f"Top Speed {speed:+d} km/h  •  Accel {accel:+.2f}\n"
             f"Stock: {stock}"
         )
 
-        self.setFont(
-            QFont(
-                "Segoe UI",
-                10
-            )
+        self.setStyleSheet(
+            """
+            QPushButton {
+                background:#17131e;
+                color:#f3efff;
+                border:1px solid #30263d;
+                border-radius:9px;
+                padding:8px 10px;
+                text-align:left;
+                font-size:11px;
+            }
+            QPushButton:hover {
+                background:#211a2d;
+                border:1px solid #6d4d91;
+            }
+            """
         )
 
 
@@ -4191,19 +4156,16 @@ class GarageWindow(QMainWindow):
         h.addStretch()
 
         # ----------------------------------------------------
-        # USER IDENTITY BOX
-        # One compact box contains both the greeting and role.
-        # This prevents the greeting from appearing twice.
+        # GREETING + ROLE (single header box)
         # ----------------------------------------------------
-        self.user_badge = QFrame()
 
-        self.user_badge.setObjectName(
-            "userBadge"
-        )
+        user_box = QFrame()
 
-        self.user_badge.setStyleSheet(
+        user_box.setObjectName("userGreetingBox")
+
+        user_box.setStyleSheet(
             """
-            QFrame#userBadge {
+            QFrame#userGreetingBox {
                 background:#1b1624;
                 border:1px solid #49385e;
                 border-radius:10px;
@@ -4216,54 +4178,32 @@ class GarageWindow(QMainWindow):
             """
         )
 
-        badge_layout = QVBoxLayout(
-            self.user_badge
-        )
+        user_box_layout = QVBoxLayout(user_box)
+        user_box_layout.setContentsMargins(12, 7, 12, 7)
+        user_box_layout.setSpacing(1)
 
-        badge_layout.setContentsMargins(
-            13,
-            7,
-            13,
-            7
-        )
-
-        badge_layout.setSpacing(1)
-
-        self.greeting_label = QLabel(
-            "Hello, Guest!"
-        )
-
-        self.greeting_label.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
-
+        self.greeting_label = QLabel("Hello, Guest!")
         self.greeting_label.setStyleSheet(
             "color:#c4b5fd;font-size:14px;font-weight:bold;"
         )
-
-        badge_layout.addWidget(
-            self.greeting_label
+        self.greeting_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
         )
 
         self.role_label = QLabel(
             f"ROLE: {self.role_name.upper()}"
         )
-
+        self.role_label.setStyleSheet(
+            "color:#a99abd;font-size:10px;font-weight:800;"
+        )
         self.role_label.setAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
 
-        self.role_label.setStyleSheet(
-            "color:#a99ac4;font-size:10px;font-weight:bold;"
-        )
+        user_box_layout.addWidget(self.greeting_label)
+        user_box_layout.addWidget(self.role_label)
 
-        badge_layout.addWidget(
-            self.role_label
-        )
-
-        h.addWidget(
-            self.user_badge
-        )
+        h.addWidget(user_box)
 
         self.money_label = QLabel()
 
@@ -4447,8 +4387,8 @@ class GarageWindow(QMainWindow):
         center.setStyleSheet(
             """
             QFrame {
-                background:#0f0b16;
-                border:1px solid #30263d;
+                background:#25232d;
+                border:1px solid #514866;
                 border-radius:15px;
             }
 
@@ -4609,12 +4549,8 @@ class GarageWindow(QMainWindow):
             True
         )
 
-        self.selected_label.setMinimumHeight(
-            92
-        )
-
         self.selected_label.setStyleSheet(
-            "color:#b8afc4;padding:8px;line-height:1.2;"
+            "color:#b8afc4;padding:5px;"
         )
 
         right_layout.addWidget(
@@ -4979,13 +4915,14 @@ class GarageWindow(QMainWindow):
                         border-radius:9px;
                         padding:8px;
                         text-align:left;
+                        font-size:11px;
                     }
                     """
                 )
 
             self.parts_list.addItem(item)
             self.parts_list.setItemWidget(item, button)
-            item.setSizeHint(QSize(0, 120))
+            item.setSizeHint(QSize(0, 110))
 
             # Clicking a part is always a preview. It does not alter
             # the available choices and does not write to MySQL.
@@ -5030,6 +4967,13 @@ class GarageWindow(QMainWindow):
                 preview=True
             )
 
+    def is_stock_part(self, part):
+
+        name = str(part.get("part_name", "")).strip().lower()
+        price = Decimal(str(part.get("price", 0) or 0))
+
+        return name.startswith("stock ") or price == 0
+
     def select_part(
         self,
         part,
@@ -5042,11 +4986,18 @@ class GarageWindow(QMainWindow):
             part["category_id"]
         )
 
+        is_stock = self.is_stock_part(part)
+
         if preview:
 
-            self.preview_parts[
-                category_id
-            ] = part
+            # Stock parts are represented by the original base car.
+            # Removing the category overlay gives a real stock preview.
+            if is_stock:
+                self.preview_parts.pop(category_id, None)
+            else:
+                self.preview_parts[
+                    category_id
+                ] = part
 
         price = Decimal(
             str(
@@ -5107,34 +5058,6 @@ class GarageWindow(QMainWindow):
                     owned_quantity > 0
                 )
 
-        acceleration = Decimal(
-            str(
-                part.get(
-                    "acceleration_bonus",
-                    0
-                ) or 0
-            )
-        )
-
-        manufacturer = str(
-            part.get(
-                "manufacturer",
-                "OEM"
-            ) or "OEM"
-        )
-
-        specs_html = (
-            f"<b>{part['part_name']}</b><br>"
-            f"<span style='color:#9f8fbd;'>"
-            f"{manufacturer}</span> &nbsp; • &nbsp; "
-            f"<span style='color:#c4b5fd;font-weight:bold;'>"
-            f"{money(price)}</span><br>"
-            f"HP: {int(part.get('hp_bonus', 0) or 0):+d} &nbsp; • &nbsp; "
-            f"Weight: {int(part.get('weight_change', 0) or 0):+d} kg<br>"
-            f"Top Speed: {int(part.get('top_speed_bonus', 0) or 0):+d} km/h &nbsp; • &nbsp; "
-            f"Acceleration: {acceleration:+.2f}"
-        )
-
         # ----------------------------------------------------
         # ALREADY INSTALLED
         # ----------------------------------------------------
@@ -5142,10 +5065,14 @@ class GarageWindow(QMainWindow):
         if is_installed:
 
             self.selected_label.setText(
-                specs_html + "<br>"
-                f"<span style='color:#76a879;'>"
-                f"✓ Currently installed"
-                f"</span>"
+                f"<b>{part['part_name']}</b><br>"
+                f"{part.get('manufacturer') or 'OEM'}  •  "
+                f"{'FREE' if is_stock or price == 0 else money(price)}<br>"
+                f"HP {int(part.get('hp_bonus', 0) or 0):+d}  •  "
+                f"Weight {int(part.get('weight_change', 0) or 0):+d} kg  •  "
+                f"Top Speed {int(part.get('top_speed_bonus', 0) or 0):+d} km/h  •  "
+                f"Accel {Decimal(str(part.get('acceleration_bonus', 0) or 0)):+.2f}<br>"
+                f"<span style='color:#76a879;'>✓ Currently installed</span>"
             )
 
             self.buy_button.setText(
@@ -5163,11 +5090,14 @@ class GarageWindow(QMainWindow):
         elif is_owned:
 
             self.selected_label.setText(
-                specs_html + "<br>"
-                f"<span style='color:#76a879;'>"
-                f"✓ Owned × {owned_quantity}"
-                f"</span><br>"
-                f"Ready to install"
+                f"<b>{part['part_name']}</b><br>"
+                f"{part.get('manufacturer') or 'OEM'}  •  "
+                f"{'FREE' if is_stock or price == 0 else money(price)}<br>"
+                f"HP {int(part.get('hp_bonus', 0) or 0):+d}  •  "
+                f"Weight {int(part.get('weight_change', 0) or 0):+d} kg  •  "
+                f"Top Speed {int(part.get('top_speed_bonus', 0) or 0):+d} km/h  •  "
+                f"Accel {Decimal(str(part.get('acceleration_bonus', 0) or 0)):+.2f}<br>"
+                f"<span style='color:#76a879;'>✓ Owned × {owned_quantity} — ready to install</span>"
             )
 
             self.buy_button.setText(
@@ -5185,11 +5115,27 @@ class GarageWindow(QMainWindow):
         else:
 
             self.selected_label.setText(
-                specs_html + "<br>"
+                f"<b>{part['part_name']}</b><br>"
+                f"{part.get('manufacturer') or 'OEM'}  •  "
+                f"{'FREE' if is_stock or price == 0 else money(price)}<br>"
+                f"HP {int(part.get('hp_bonus', 0) or 0):+d}  •  "
+                f"Weight {int(part.get('weight_change', 0) or 0):+d} kg  •  "
+                f"Top Speed {int(part.get('top_speed_bonus', 0) or 0):+d} km/h  •  "
+                f"Accel {Decimal(str(part.get('acceleration_bonus', 0) or 0)):+.2f}<br>"
                 f"Shop stock: {stock}"
             )
 
-            if not self.can_buy():
+            if is_stock:
+
+                self.buy_button.setText(
+                    "INSTALL FREE"
+                )
+
+                self.buy_button.setEnabled(
+                    self.can_buy()
+                )
+
+            elif not self.can_buy():
 
                 self.buy_button.setText(
                     "GUEST — PURCHASE DISABLED"
@@ -5349,6 +5295,9 @@ class GarageWindow(QMainWindow):
         )
 
         for part in parts:
+
+            if self.is_stock_part(part):
+                continue
 
             sprite = self.load_pixmap(
                 part.get(
@@ -5677,6 +5626,68 @@ class GarageWindow(QMainWindow):
                 raise RuntimeError(
                     "This part is already installed."
                 )
+
+            # =================================================
+            # FREE STOCK PART
+            # =================================================
+            # Stock parts are part of the base car. They cost nothing,
+            # do not consume shop stock, and do not create purchase
+            # history or player-inventory entries.
+            if self.is_stock_part(part):
+
+                if installed_row:
+
+                    cursor.execute(
+                        """
+                        UPDATE vehicle_parts
+                        SET part_id = %s
+                        WHERE vehicle_id = %s
+                          AND category_id = %s
+                        """,
+                        (
+                            part_id,
+                            vehicle_id,
+                            category_id
+                        )
+                    )
+
+                else:
+
+                    cursor.execute(
+                        """
+                        INSERT INTO vehicle_parts
+                            (vehicle_id, category_id, part_id)
+                        VALUES (%s, %s, %s)
+                        """,
+                        (
+                            vehicle_id,
+                            category_id,
+                            part_id
+                        )
+                    )
+
+                self.db.conn.commit()
+                self.db.conn.autocommit = True
+
+                self.load_installed_parts()
+                self.load_parts()
+                self.populate_parts()
+                self.preview_parts = dict(self.installed_parts)
+                self.refresh_car_preview()
+                self.refresh_user_display()
+
+                self.status_label.setText(
+                    f"✓ {part['part_name']} installed for free."
+                )
+
+                QMessageBox.information(
+                    self,
+                    "Installation Complete",
+                    f"{part['part_name']} was installed successfully.\n\n"
+                    "Stock parts are included with the car and cost nothing."
+                )
+
+                return
 
             # =================================================
             # PLAYER INVENTORY
