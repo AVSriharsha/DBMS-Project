@@ -41,7 +41,7 @@ DB_HOST = "127.0.0.1"
 DB_PORT = 3306
 DB_NAME = "car_customizer"
 DB_USER = "root"
-DB_PASSWORD = "Arvinth@1980820716"
+DB_PASSWORD = "P14Y3R"
 
 
 # ============================================================
@@ -4383,6 +4383,15 @@ class GarageWindow(QMainWindow):
                 self.current_category_id,
             )
         )
+
+        # The NISMO Front Bumper is not offered for the Supra MK4.
+        # Keep the shared database catalog unchanged for other car models.
+        if self.current_model_name() == "Supra MK4":
+            self.parts = [
+                part for part in self.parts
+                if str(part.get("part_name", "")).strip().casefold()
+                != "nismo front bumper".casefold()
+            ]
 
     def load_installed_parts(self):
 
