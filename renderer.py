@@ -142,13 +142,14 @@ def create_car_preview(parts):
 
         elif category == "Engine":
 
-            if part["part_name"] == "Turbo Engine":
+            #if part["part_name"] == "Turbo Engine":*/
 
-                draw.ellipse(
-                    (330, 165, 400, 235),
-                    fill=(180, 180, 180),
-                    outline=(20, 20, 20),
-                    width=4
-                )
+                #draw.ellipse(
+                    #(330, 165, 400, 235),
+                    #fill=(180, 180, 180),
+                    #outline=(20, 20, 20),
+                  #  width=4
+            #    )
+            pass
 
     return image
